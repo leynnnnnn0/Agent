@@ -1,1936 +1,229 @@
-# Portable Codex Android rules and implementation reference
+# RestaurantApp UI contract — 2026-10-17
 
-This single file is the complete handoff. The next agent may have ONLY this file, with no original project, screenshots, chat history, helpers, or drawables. All required modal, toast, badge, model, session, and database templates are embedded below. Recreate them from these blocks when missing; reuse them when already present. Do not say “use the existing helper” without first checking that it exists.
+This file is the current source of truth for the app's reusable visual design. Follow the prose rules first, then use the complete XML resources in the appendix as the visual reference for the requested screen. Adapt domain text, IDs, and data bindings while preserving the reference's visible hierarchy, spacing, alignment, shapes, styles, and colors. The appendix is an exact snapshot of every current XML file under `app/src/main/res` plus `AndroidManifest.xml`; it includes the personal search drawer, profile, featured row, activity section, launcher icons, and backup configuration. Its existing `@string` references and separate style files document the current project; they are not the rule for new work. This documentation update does not change those live resources. In this repository, edit live files under `app/src/main/res` when implementation work is requested; do not create duplicate resources from the appendix. For another project, bring over the needed visual values and binary assets, consolidate styles into one `styles.xml`, and put static TextView copy inline as specified below. If a screenshot or older guide disagrees with a live resource here, the latest user request and live resource win. A destination project's existing appearance does not silently override this visual contract; preserve a different theme only when the user explicitly requests it.
 
-The examples use `com.example.app`. Replace that package, its `R` imports, and source directories with the destination application's package. Merge resource entries into existing files rather than overwriting unrelated project resources. Create only the components needed by the requested feature; this reference is not an instruction to generate every file immediately.
+## Global implementation rules
 
-## 1. Hard rules
+- Use Java and Android XML, ViewBinding (`buildFeatures { viewBinding = true }`), `AppCompatButton` for text buttons, and existing local dependencies. Keep code short and readable.
+- Font: `app/src/main/res/font/arial_rounded_mt_bold.ttf`. Both `android:fontFamily` and `fontFamily` are set in `values/themes.xml`. Keep explicit font attributes where present. The TTF is a binary asset and must be copied with the project; it cannot be represented by XML. Do not assume a theme font affects every custom-drawn text or every widget automatically. The current `values-night/themes.xml` snapshot contains a sparse override without the explicit font and color items. When reproducing the design, copy the day theme's font and palette items into the night override too, or use one shared base theme that resolves identically in both modes; otherwise night mode can look different.
+- Palette: use the green `primary_darkest`, `primary_dark`, `primary`, `primary_lime`, and `primary_light` values in the appendix's `values/colors.xml` by default, including in other projects. Change the five primary shades only in `values/colors.xml` when the user requests a different theme; do not substitute grayscale or another palette on your own. Keep `success` and `destructive`, the badge colors currently used by the app, and `text_heading`, `text_body`, `text_subheading`. Neutral exceptions for text fields and create/show page backgrounds are intentional. Drawables and styles should refer to these color resources rather than inventing unrelated hex values.
+- Keep modal and top-toast appearance exactly as `layout/modal_status.xml`, `layout/toast_banner.xml`, their drawable/style resources, and `AppModal`/`AppToast`. State-changing actions use the confirmation/danger modal before the change and the toast after the actual result.
+- Use the shared animated empty state `layout/view_empty_list.xml` for empty and zero-result lists. Seed each actual database table with useful preview data, including supporting tables, even when a machine problem omits example rows. Keep tables independent: no SQL foreign keys, joins, reference columns, or relationship lookups. Default lists show latest-created records first and retain that order through search/filter.
 
-- Java application code and XML layouts only, unless the user explicitly requests otherwise.
-- OFFLINE ONLY: the app must be developed, built, and run using the Android Studio installation, SDK, build tools, assets, and dependencies already available on that computer. Internet access must not be required.
-- Android SDK APIs and locally available libraries are allowed. AndroidX RecyclerView, AppCompat, ConstraintLayout, Material Components, ChipGroup, and other components are permitted when their complete dependencies are already present locally and they work offline.
-- The restriction is NOT “SDK-only” and NOT a ban based on who published a library. A third-party library is acceptable only if it is already locally available, relevant to the requested feature, and needs neither a download nor an online service. Prefer existing project components over adding complexity.
-- Never download libraries, Gradle plugins, SDK packages, fonts, icons, images, or other assets. Do not change dependency versions to ones unavailable locally or depend on remote repositories resolving new artifacts.
-- Never use external web APIs, HTTP backends, cloud databases, online authentication, remote image URLs, or services that need a network connection. Local Android framework APIs and local SQLite calls are allowed; “no APIs” refers to external/network services, not the Android SDK itself.
-- Do not add the INTERNET permission or network client code for these offline projects. Store and process application data locally through the required DBHelper and other requested local functionality.
-- Keep the destination project's existing offline-compatible AndroidX/Material setup. Do not rewrite it into SDK-only code merely because the earlier version of this guide called for “native only.” The platform-only templates below are complete fallback implementations, not a prohibition against locally available widgets.
-- Keep implementations short, direct, and readable. Do not add abstraction layers, repositories, dependency injection, builders, configuration objects, listeners, generic frameworks, or extra files without an actual need.
-- Do not minify code or combine unrelated statements just to claim fewer lines.
-- NEVER add Java comments, Javadocs, XML comments, TODOs, or commented-out code. Explanations belong in prose outside the source.
-- Adapter constructors take ONLY `Context context` and the model list. No third argument, callback, listener, consumer, or options object. Action logic stays inside the adapter.
-- NEVER use SQLite foreign-key constraints or nested model relationships. Store plain integer fields such as `userId`, `studentId`, and `subjectId`; section 22 shows the exact rule.
-- All state-changing transactions require a confirmation/danger modal BEFORE execution and success/error toast AFTER the actual result. Cancel changes nothing.
-- Handle real errors, close cursors/streams, and reset recycled view state. Do not omit essential correctness to reduce code length, and do not add speculative checks unrelated to the feature.
-- Reuse resources. Remove files and entries made unused by a change, while keeping shared resources still in use.
-- Do not reintroduce image saving, a dedicated success page, or a custom loading button unless the user asks for them.
-- For an application built from a machine problem, create the tables required by that problem and seed every created table with useful local sample records. Also seed supporting tables and entities needed to make the requested workflows and screens usable, even when their example records are not supplied by the problem. Do not create unrelated features, a login flow, or extra screens without a real use in the application.
+For an exact day/night transfer, replace the sparse night-theme snapshot in the appendix with the same font and palette items as the day theme. This is the intended `values-night/themes.xml` content for a destination project; the appendix below still records this project's current file verbatim:
 
-## 2. Architecture and naming
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="Base.Theme.RestaurantApp"
+        parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+        <item name="fontFamily">@font/arial_rounded_mt_bold</item>
+        <item name="colorPrimary">@color/primary_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/primary</item>
+        <item name="colorOnSecondary">@color/text_heading</item>
+        <item name="colorSurface">@color/white</item>
+        <item name="colorOnSurface">@color/text_heading</item>
+        <item name="colorError">@color/destructive</item>
+        <item name="colorOnError">@color/white</item>
+        <item name="android:colorAccent">@color/primary</item>
+    </style>
+</resources>
+```
 
-| Package/resource | Responsibility |
+## Mandatory Java package structure
+
+Create these packages as soon as their first class is needed. Do not put all classes in the base package merely because Android Studio created it there.
+
+| Package | What belongs there |
 | --- | --- |
-| Base package or role/feature package such as `admin` | Activities, screen setup, navigation, refreshing records |
-| `models` | Plain public-field model classes and `StaticUserModel` |
-| `adapters` | RecyclerView adapters, ViewHolders, binding, row action logic |
-| `helpers` | `DBHelper`, `AppModal`, `AppToast`, genuinely shared behavior |
-| `res/layout` | Activity layouts and reusable component layouts |
-| `res/drawable` | XML backgrounds and vector icons |
-| `res/values` | Shared strings, colors, and styles |
+| base package | `SampleLoginActivity`, `SampleRegisterActivity`, `PersonalDashboardActivity`, and role-neutral sample/demo Activities; there is no `MainActivity` |
+| `admin` (or the actual role name) | Every Activity owned by that role, such as `AdminDashboardActivity`, `AdminCarListActivity`, `AdminCarShowActivity`, and create/edit/report Activities |
+| `models` | One plain model for each stored or displayed entity, including notification items |
+| `adapters` | Every RecyclerView adapter and its ViewHolder; item/person/activity/notification lists must be bound through adapters rather than views built inside an Activity |
+| `helpers` | `DBHelper`, `AppModal`, `AppToast`, seeders, PDF export, and shared business rules/utilities |
 
-Keep SQL in DBHelper and fields in models. Do not put a second database implementation inside an Activity or adapter. Use role packages only when there is a real screen to organize. Do not invent MVVM/MVC layers for this small Java/XML reference.
+For example, a car-rental app should not leave `AdminCarListActivity`, `AppModal`, `Database`, `RentalRules`, and `ReportPdf` side by side in `com.example.carrental`. Put the admin screens in `com.example.carrental.admin`; models in `.models`; list adapters in `.adapters`; and `DBHelper`, modal/toast, rental rules, and PDF helper in `.helpers`. Use `DBHelper` as the SQLite helper name. Keep data fields in models, SQL in `DBHelper`, row binding in adapters, and screen setup/navigation in Activities. Update package declarations, imports, manifest Activity names, and affected tests whenever moving an existing class. Before finishing, inspect the Java tree and verify every class is in its designated package. Only omit a package when the feature truly has no class of that kind.
 
-## 3. XML and Java formatting
+## Offline, code, and screen ownership rules
 
-Use four-space indentation. Put the opening element name on its own line and EVERY XML attribute on a separate line. Do not put multiple attributes beside one another. This applies to layouts, drawables, menus, values files, and the manifest; the XML declaration can remain on one line.
+- Work with the Android Studio SDK, assets, Gradle plugins, and dependencies already available locally. AndroidX and Material widgets are allowed when already installed. Do not add a dependency, font, icon, image, HTTP backend, cloud database, remote authentication, or Internet permission that makes the app require a network connection.
+- This is a hackathon app: prioritize working screens and exact design with the shortest clear Java/XML implementation. Avoid unnecessary architecture layers, repositories, dependency injection, generic frameworks, and extra files. Do not add try/catch for routine code; use it only when an API requires it or a real failure must be shown. Do not compress unrelated statements to save lines. Do not add Java or XML comments, Javadocs, TODOs, or commented-out code.
+- Put every XML attribute on a separate line with four-space indentation in new or edited XML. Keep existing resource names and remove only resources genuinely made unused.
+- For new or edited screens, put fixed visible copy directly in the view's XML attribute, for example `android:text="Activities"` on a `TextView`. Put static hints directly on the field too. Do not add screen copy to `strings.xml` or create feature-specific string resource files. Set runtime values from Java. Keep string resources only where Android requires a resource, such as the application label, or where a reusable system-facing value genuinely needs one.
+- Put all reusable UI `<style>` definitions in one `app/src/main/res/values/styles.xml`. Do not create per-screen or per-component style files. When adapting a style from the appendix, move its definition into that one file and keep the style name and appearance. `themes.xml`, `values-night/themes.xml`, `colors.xml`, and `typography.xml` keep their separate platform/theme/token roles; do not merge them into `styles.xml`.
+- Use `AppCompatButton` for text buttons and `AppCompatImageButton` for icon-only buttons. Preserve the exact existing modal, toast, badge, and card appearance. Never substitute stock `Toast`, `Snackbar`, or `AlertDialog` for the approved reusable modal/toast.
+- Every role-owned Activity follows `<Role><EntityOrAction>Activity` and lives in its role package. Each role gets its own dashboard, list, create, update, show, and report Activity/layout when that screen is requested. Create and update are separate Activities and layouts, even if they share fields. Register each created Activity in the manifest and update references when moving it. Shared models, small components, drawables, and helpers remain reusable.
+- RecyclerView lists require a model-specific row XML, adapter, and ViewHolder. Adapter constructors take only `Context` and the model list. Keep row binding and row-specific actions in the adapter; do not inflate repeated rows directly inside an Activity or pass extra callbacks as constructor/setter workarounds. Reset all variable visibility, image, badge, and text state during each bind. Never show passwords or private credentials in a row.
+- Keep SQL in `helpers.DBHelper`. Models use plain public scalar fields. Tables are independent: do not add SQL joins, references, foreign keys, relationship IDs, or nested model graphs. Seed every table once with relevant sample data, including supporting entities; do not reseed on each launch or erase user edits. Use a reliable creation key for newest-first lists.
+- A transaction changes data only after the appropriate confirmation/danger modal; Cancel changes nothing. Show the success/error toast after the real result, close cursors and streams, handle actual errors, and refresh the affected RecyclerView.
+- For implementation changes, run the relevant offline build and inspect meaningful UI/transaction flows on an available emulator when practical, unless the user explicitly says not to test. Do not add tests that merely mirror a trivial layout. Documentation-only changes do not require an app build. Report what was and was not verified.
 
-```xml
-<TextView
-    android:id="@+id/user_phone"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:drawableStart="@drawable/ic_user_phone"
-    android:text="@string/sample_user_phone" />
-```
+## Mandatory DBHelper format
 
-Keep source free of comments. Use clear variable names, plain public model fields, and no unnecessary getters/setters. Follow the destination project's normal Java formatting. Do not add optional decorative `importantForAccessibility`, `contentDescription`, accessibility-heading, or live-region attributes by default; the user explicitly prefers minimal hackathon XML. Add them only when requested or essential to a requested feature.
+Put one `DBHelper extends SQLiteOpenHelper` in `helpers`. Every persisted model in `models` declares a public static `TABLE_NAME`, a public no-argument constructor, and public scalar fields whose names match SQL columns. Map only `String`, `int`/`Integer`, and `double`/`Double`; represent flags as `int` 0/1. SQL columns use only `TEXT`, `INTEGER`, or `DOUBLE`; every non-ID column is nullable. Do not add `NOT NULL`, `COLLATE`, SQL joins, references, foreign keys, or nested model graphs. This hackathon app stores passwords as plain text; no hashing is required. Never display passwords in rows.
 
-For preview-only placeholders use the built-in Android Studio `tools` namespace. It is design-time metadata, not a dependency. Use `tools:text`, `tools:background`, and `tools:scaleX`/`tools:scaleY` so preview content is visible without replacing runtime data. Every modal/toast layout below includes these.
-
-## 4. Exact component appearance and behavior
-
-These specifications and the complete sample code/resources below are the fixed design. Use them exactly for the modal and toast; do not restyle their shapes, gradient colors, icon rings, animation, placement, type sizes, or buttons. If the project already contains the approved AppModal/AppToast samples, reuse those existing helpers and resources without rewriting them. Do not substitute a stock AlertDialog, Android Toast, Snackbar, or a new theme-derived design. These specifications replace the unavailable screenshots. Do not redesign the components from vague terms such as “modern.” Use the sizes, shapes, and colors below. Font is the system sans-serif. Use dp for dimensions and sp for text.
-
-### Confirmation and danger modal
-
-- Centered floating card, maximum width 420dp, with at least 24dp side space on smaller screens; height wraps its content.
-- Rounded card corners 24dp and internal padding 24dp. Dim the rest of the Activity to 55%.
-- Confirmation card is a very light diagonal green/white gradient. Danger uses a very light pink/white gradient.
-- Centered 96dp circular icon: two pale rings around a colored gradient center, white bold 36sp `?` for confirmation or `!` for danger. Do not add an image library.
-- Icon starts at scale 0 and expands to 1 over 1200ms with Android's `OvershootInterpolator`; a small bounce is intentional.
-- Centered bold 22sp title, color `#202033`, 12dp below the icon.
-- Centered 15sp message, color `#6B6B80`, 10dp below the title and 3dp additional line spacing.
-- Buttons are a horizontal equal-width row 28dp below the message. Each is 52dp high, rounded 12dp. Gap is 12dp.
-- Cancel is pale/transparent white with a 1dp `#DADDEA` outline and dark `#29293D` text. Confirm is a filled green gradient; danger Confirm is red. Confirm label is `Confirm →`, white 15sp, normal case.
-- Both cancel and back/outside dismissal make no change. Confirm dismisses the modal and runs the supplied action once. Prevent repeated confirm taps.
-- Do not add a separate success modal. Success is communicated by the top toast.
-
-### Top success/error toast banner
-
-- This is an in-app view overlay, NOT Android's restricted system `Toast`, NOT a dialog, and NOT a notification.
-- It spans available Activity width with 12dp side margins. Place it 12dp below the status bar/cutout. It must not dim the screen or stop interaction with the rest of the page.
-- Same rounded 24dp gradient card design as the modal: pale green for success, pale pink for error; padding 16dp, elevation 8dp.
-- Left icon is 56dp with pale rings and gradient center; white bold 24sp `✓` for success or `!` for error.
-- Right text column has 12dp spacing from the icon. Title is bold 16sp `#202033`; message is 14sp `#6B6B80`, with 4dp top spacing. Text wraps naturally.
-- Slide/fade in over 300ms from 48dp above its resting position. Stay for 4000ms, then slide/fade out over 200ms.
-- Tap the banner to dismiss it. A new banner replaces the previous one instead of stacking. Do not hold Activities in static fields.
-- Its text must describe the actual operation result. Do not use success styling for an operation that failed.
-
-### Five reusable badges
-
-- Names are exactly `green_badge`, `red_badge`, `blue_badge`, `yellow_badge`, `purple_badge` for both drawable and style resources.
-- Noninteractive `TextView` pill: 100dp corner radius, subtle vertical pastel gradient, 1dp pale outline, minimum height 28dp.
-- A solid 8dp circular dot sits 12dp from the left and is vertically centered. Implement the dot inside the background `layer-list`, not as another view.
-- Background padding is left 28dp, right 12dp, top/bottom 6dp; this reserves room for the dot. Use `paddingMode="stack"` so the dot is not displaced by nested drawable padding.
-- Text is system sans-serif bold 12sp in a darker shade of its color. No forced uppercase, click handling, or fixed width. Label comes from the actual status.
-
-| Badge | Gradient top | Gradient bottom | Outline | Dot | Text |
-| --- | --- | --- | --- | --- | --- |
-| Green | `#F1FCF8` | `#E6FAF2` | `#D7F6EC` | `#10BE8B` | `#12805C` |
-| Red | `#FFF3F5` | `#FFE8ED` | `#FBD5DD` | `#EF4260` | `#BC3048` |
-| Blue | `#EFF6FF` | `#E2EEFF` | `#D8E7FF` | `#4385F5` | `#285FB9` |
-| Yellow | `#FFFBEB` | `#FFF3CE` | `#FAE9AB` | `#E8B129` | `#946900` |
-| Purple | `#F8F2FF` | `#EEDFFF` | `#E8D9FC` | `#9A62DE` | `#7944AD` |
-
-## 5. Complete native component files
-
-The following are complete files, not pseudocode. They require API 24 or newer, Java 8+ language support, and the normal Android SDK. They do not need Material, AppCompat, ConstraintLayout, image libraries, or third-party dependencies. Keep all resource names consistent. When merging into a project, preserve unrelated resource entries.
-
-### `app/src/main/java/com/example/app/helpers/AppModal.java`
+The helper must provide the same reflection-based CRUD API for every model, using `TABLE_NAME` and public fields rather than a separate row mapper or `ContentValues` builder for each entity:
 
 ```java
-package com.example.app.helpers;
-
-import android.app.Dialog;
-import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.Window;
-import android.view.WindowManager;
-import android.view.animation.OvershootInterpolator;
-import android.widget.TextView;
-import com.example.app.R;
-
-public final class AppModal {
-    public static void confirm(Context context, String title, String message, Runnable onConfirm) {
-        show(context, title, message, onConfirm, false);
-    }
-
-    public static void danger(Context context, String title, String message, Runnable onConfirm) {
-        show(context, title, message, onConfirm, true);
-    }
-
-    private static void show(Context context, String title, String message, Runnable onConfirm, boolean danger) {
-        java.util.Objects.requireNonNull(onConfirm);
-        View view = LayoutInflater.from(context).inflate(R.layout.modal_status, null);
-        TextView icon = view.findViewById(R.id.modal_icon);
-        icon.setText(danger ? "!" : "?");
-        icon.setBackgroundResource(danger ? R.drawable.status_danger_circle : R.drawable.status_success_circle);
-        view.setBackgroundResource(danger ? R.drawable.danger_card : R.drawable.modal_card);
-        ((TextView) view.findViewById(R.id.modal_title)).setText(title);
-        ((TextView) view.findViewById(R.id.modal_message)).setText(message);
-        Dialog modal = new Dialog(context);
-        modal.requestWindowFeature(Window.FEATURE_NO_TITLE);
-        modal.setContentView(view);
-        TextView confirm = view.findViewById(R.id.modal_confirm);
-        confirm.setText(R.string.confirm_arrow);
-        confirm.setBackgroundResource(danger ? R.drawable.modal_danger : R.drawable.modal_confirm);
-        confirm.setOnClickListener(v -> {
-            confirm.setEnabled(false);
-            modal.dismiss();
-            onConfirm.run();
-        });
-        view.findViewById(R.id.modal_cancel).setOnClickListener(v -> modal.dismiss());
-        modal.show();
-        Window window = modal.getWindow();
-        window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        window.setDimAmount(0.55f);
-        float dp = context.getResources().getDisplayMetrics().density;
-        int width = context.getResources().getDisplayMetrics().widthPixels;
-        window.setLayout(Math.min(width - Math.round(48 * dp), Math.round(420 * dp)),
-                WindowManager.LayoutParams.WRAP_CONTENT);
-        icon.animate().scaleX(1).scaleY(1).setDuration(1200)
-                .setInterpolator(new OvershootInterpolator()).start();
-    }
-}
+boolean create(Object model) throws ReflectiveOperationException;
+boolean update(Object model, int id) throws ReflectiveOperationException;
+boolean delete(Class<?> modelClass, int id) throws ReflectiveOperationException;
+<T> T show(Class<T> modelClass, int id) throws ReflectiveOperationException;
+<T> ArrayList<T> get(Class<T> modelClass) throws ReflectiveOperationException;
 ```
 
-### `app/src/main/java/com/example/app/helpers/AppToast.java`
+Implement this API with `getTableName`, `isColumnType`, `toContentValues`, and `fromCursor` reflection helpers. Skip static fields and `id` on writes; read `id` on queries. Use parameterized `id=?` selections, close every cursor, return `null` when `show` finds no row, and order `get` by `id DESC`. A custom column alias belongs in one shared mapping helper only when the schema genuinely requires it. Do not silently skip unsupported public model fields; either use the supported scalar type or deliberately extend the mapper for a real requirement. Keep routine database operations short; do not add defensive try/catch wrappers. Show a success toast only when the write succeeded.
 
-```java
-package com.example.app.helpers;
+Keep actual tables, seed data, and non-destructive migrations in `onCreate`/`onUpgrade`, preserving the destination project's database name and version. Domain methods may enforce business rules, authentication, or filtered queries, but should delegate ordinary model writes and reads to the generic CRUD methods. Do not replace this helper with per-model `car(...)`, `user(...)`, or similar mappers, Room, a repository layer, or an ORM.
 
-import android.app.Activity;
-import android.os.Build;
-import android.view.Gravity;
-import android.view.View;
-import android.view.WindowInsets;
-import android.widget.FrameLayout;
-import android.widget.TextView;
-import com.example.app.R;
+## Fixed typography sizes
 
-public final class AppToast {
-    public static void success(Activity activity, String title, String message) {
-        show(activity, title, message, false);
-    }
+`app/src/main/res/values/typography.xml` is the single source for text sizes. New and edited XML must use these `@dimen/type_...` resources in `android:textSize` and styles; do not write raw `sp` values or choose sizes by eye. Keep the Arial Rounded font from the theme. Use the standard roles below for new screens:
 
-    public static void error(Activity activity, String title, String message) {
-        show(activity, title, message, true);
-    }
-
-    private static void show(Activity activity, String title, String message, boolean error) {
-        FrameLayout root = activity.findViewById(android.R.id.content);
-        View previous = root.findViewWithTag(AppToast.class);
-        if (previous != null) {
-            previous.animate().cancel();
-            root.removeView(previous);
-        }
-        View banner = activity.getLayoutInflater().inflate(R.layout.toast_banner, root, false);
-        banner.setTag(AppToast.class);
-        banner.setBackgroundResource(error ? R.drawable.danger_card : R.drawable.modal_card);
-        TextView icon = banner.findViewById(R.id.toast_icon);
-        icon.setText(error ? "!" : "✓");
-        icon.setBackgroundResource(error ? R.drawable.status_danger_circle : R.drawable.status_success_circle);
-        ((TextView) banner.findViewById(R.id.toast_title)).setText(title);
-        ((TextView) banner.findViewById(R.id.toast_message)).setText(message);
-        int gap = Math.round(12 * activity.getResources().getDisplayMetrics().density);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP);
-        params.setMargins(gap, gap, gap, 0);
-        banner.setOnApplyWindowInsetsListener((v, insets) -> {
-            int top, left, right;
-            if (Build.VERSION.SDK_INT >= 30) {
-                android.graphics.Insets bars = insets.getInsets(
-                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                top = bars.top;
-                left = bars.left;
-                right = bars.right;
-            } else {
-                top = insets.getSystemWindowInsetTop();
-                left = insets.getSystemWindowInsetLeft();
-                right = insets.getSystemWindowInsetRight();
-            }
-            int[] position = new int[2];
-            root.getLocationOnScreen(position);
-            params.setMargins(gap + left, gap + Math.max(0, top - position[1]), gap + right, 0);
-            banner.setLayoutParams(params);
-            return insets;
-        });
-        root.addView(banner, params);
-        banner.requestApplyInsets();
-        banner.setTranslationY(-gap * 4);
-        banner.setAlpha(0);
-        banner.animate().translationY(0).alpha(1).setDuration(300).start();
-        banner.setOnClickListener(v -> root.removeView(banner));
-        banner.postDelayed(() -> banner.animate().alpha(0).translationY(-gap * 2).setDuration(200)
-                .withEndAction(() -> root.removeView(banner)).start(), 4000);
-    }
-}
-```
-
-### `app/src/main/res/layout/modal_status.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:gravity="center"
-    android:padding="24dp"
-    android:background="@drawable/modal_card">
-    <TextView
-        android:id="@+id/modal_icon"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
-        android:textColor="#FFFFFF"
-        android:textSize="36sp"
-        android:textStyle="bold"
-        android:gravity="center"
-        android:includeFontPadding="false"
-        android:scaleX="0"
-        android:scaleY="0"
-        tools:background="@drawable/status_success_circle"
-        tools:scaleX="1"
-        tools:scaleY="1"
-        tools:text="?" />
-    <TextView
-        android:id="@+id/modal_title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="center"
-        android:textSize="22sp"
-        android:textStyle="bold"
-        android:textColor="#202033"
-        tools:text="Confirm your action" />
-    <TextView
-        android:id="@+id/modal_message"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:gravity="center"
-        android:textSize="15sp"
-        android:lineSpacingExtra="3dp"
-        android:textColor="#6B6B80"
-        tools:text="Are you sure you want to continue? Confirm to complete this action." />
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="28dp"
-        android:orientation="horizontal">
-        <Button
-            android:id="@+id/modal_cancel"
-            android:layout_width="0dp"
-            android:layout_height="52dp"
-            android:layout_weight="1"
-            android:layout_marginEnd="12dp"
-            android:background="@drawable/modal_cancel"
-            android:backgroundTint="@null"
-            android:stateListAnimator="@null"
-            android:text="@android:string/cancel"
-            android:textColor="#29293D"
-            android:textSize="15sp"
-            android:textAllCaps="false" />
-        <Button 
-            android:id="@+id/modal_confirm"
-            android:layout_width="0dp"
-            android:layout_height="52dp"
-            android:layout_weight="1"
-            android:background="@drawable/modal_confirm"
-            android:backgroundTint="@null"
-            android:elevation="6dp"
-            android:textColor="#FFFFFF"
-            android:textSize="15sp"
-            android:textAllCaps="false"
-            tools:text="@string/confirm_arrow" />
-    </LinearLayout>
-</LinearLayout>
-```
-
-### `app/src/main/res/layout/toast_banner.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:padding="16dp"
-    android:elevation="8dp"
-    tools:background="@drawable/modal_card">
-    <TextView
-        android:id="@+id/toast_icon"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:gravity="center"
-        android:includeFontPadding="false"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:textColor="#FFFFFF"
-        tools:background="@drawable/status_success_circle"
-        tools:text="✓" />
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="12dp"
-        android:orientation="vertical">
-        <TextView
-            android:id="@+id/toast_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:textColor="#202033"
-            tools:text="Changes saved" />
-        <TextView
-            android:id="@+id/toast_message"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textSize="14sp"
-            android:textColor="#6B6B80"
-            tools:text="Your changes have been saved successfully." />
-    </LinearLayout>
-</LinearLayout>
-```
-
-### `app/src/main/res/values/colors.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color
-        name="black">#FF000000</color>
-    <color
-        name="white">#FFFFFFFF</color>
-    <color
-        name="success_pale">#E3F8F0</color>
-    <color
-        name="success_ring">#C4F1DF</color>
-    <color
-        name="success_light">#36D399</color>
-    <color
-        name="success">#16B981</color>
-    <color
-        name="badge_green_text">#12805C</color>
-    <color
-        name="badge_red_text">#BC3048</color>
-    <color
-        name="badge_blue_text">#285FB9</color>
-    <color
-        name="badge_yellow_text">#946900</color>
-    <color
-        name="badge_purple_text">#7944AD</color>
-</resources>
-```
-
-### `app/src/main/res/values/component_strings.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string
-        name="confirm_arrow">Confirm →</string>
-</resources>
-```
-
-### `app/src/main/res/drawable/modal_card.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="24dp" />
-    <gradient
-        android:angle="225"
-        android:startColor="@color/success_pale"
-        android:centerColor="#F7FCFA"
-        android:endColor="#FFFFFF" />
-</shape>
-```
-
-### `app/src/main/res/drawable/danger_card.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="24dp" />
-    <gradient
-        android:angle="225"
-        android:startColor="#FFE3E7"
-        android:centerColor="#FFF8F9"
-        android:endColor="#FFFFFF" />
-</shape>
-```
-
-### `app/src/main/res/drawable/modal_confirm.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ripple
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#40FFFFFF">
-    <item>
-        <shape>
-            <corners
-                android:radius="12dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="@color/success_light"
-                android:endColor="@color/success" />
-        </shape>
-    </item>
-</ripple>
-```
-
-### `app/src/main/res/drawable/modal_danger.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ripple
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#40FFFFFF">
-    <item>
-        <shape>
-            <corners
-                android:radius="12dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#EF4258"
-                android:endColor="#D91F36" />
-        </shape>
-    </item>
-</ripple>
-```
-
-### `app/src/main/res/drawable/modal_cancel.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ripple
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#1816B981">
-    <item>
-        <shape>
-            <corners
-                android:radius="12dp" />
-            <solid
-                android:color="#60FFFFFF" />
-            <stroke
-                android:width="1dp"
-                android:color="#DADDEA" />
-        </shape>
-    </item>
-</ripple>
-```
-
-### `app/src/main/res/drawable/status_success_circle.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="@color/success_pale" />
-        </shape>
-    </item>
-    <item
-        android:left="6dp"
-        android:top="6dp"
-        android:right="6dp"
-        android:bottom="6dp">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="@color/success_ring" />
-        </shape>
-    </item>
-    <item
-        android:left="13dp"
-        android:top="13dp"
-        android:right="13dp"
-        android:bottom="13dp">
-        <shape
-            android:shape="oval">
-            <gradient
-                android:angle="270"
-                android:startColor="@color/success_light"
-                android:endColor="@color/success" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/status_danger_circle.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item>
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#FFF0F1" />
-        </shape>
-    </item>
-    <item
-        android:left="6dp"
-        android:top="6dp"
-        android:right="6dp"
-        android:bottom="6dp">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#FFDADD" />
-        </shape>
-    </item>
-    <item
-        android:left="13dp"
-        android:top="13dp"
-        android:right="13dp"
-        android:bottom="13dp">
-        <shape
-            android:shape="oval">
-            <gradient
-                android:angle="270"
-                android:startColor="#F65A6C"
-                android:endColor="#DC263D" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-## 6. Complete badge files and usage
-
-The drawable contains the pill and dot; the style supplies size and text color. Set BOTH background and text color when changing a recycled row from one color to another. Do not tint the whole layered background, because that would also recolor the dot/gradient.
-
-### `app/src/main/res/drawable/green_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#F1FCF8"
-                android:endColor="#E6FAF2" />
-            <stroke
-                android:width="1dp"
-                android:color="#D7F6EC" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#10BE8B" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/red_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#FFF3F5"
-                android:endColor="#FFE8ED" />
-            <stroke
-                android:width="1dp"
-                android:color="#FBD5DD" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#EF4260" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/blue_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#EFF6FF"
-                android:endColor="#E2EEFF" />
-            <stroke
-                android:width="1dp"
-                android:color="#D8E7FF" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#4385F5" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/yellow_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#FFFBEB"
-                android:endColor="#FFF3CE" />
-            <stroke
-                android:width="1dp"
-                android:color="#FAE9AB" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#E8B129" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/purple_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#F8F2FF"
-                android:endColor="#EEDFFF" />
-            <stroke
-                android:width="1dp"
-                android:color="#E8D9FC" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#9A62DE" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/values/badge_styles.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <style
-        name="StatusBadge"
-        parent="">
-        <item
-            name="android:layout_width">wrap_content</item>
-        <item
-            name="android:layout_height">wrap_content</item>
-        <item
-            name="android:minHeight">28dp</item>
-        <item
-            name="android:gravity">center_vertical</item>
-        <item
-            name="android:includeFontPadding">false</item>
-        <item
-            name="android:textSize">12sp</item>
-        <item
-            name="android:textStyle">bold</item>
-    </style>
-    <style
-        name="green_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/green_badge</item>
-        <item
-            name="android:textColor">@color/badge_green_text</item>
-    </style>
-    <style
-        name="red_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/red_badge</item>
-        <item
-            name="android:textColor">@color/badge_red_text</item>
-    </style>
-    <style
-        name="blue_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/blue_badge</item>
-        <item
-            name="android:textColor">@color/badge_blue_text</item>
-    </style>
-    <style
-        name="yellow_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/yellow_badge</item>
-        <item
-            name="android:textColor">@color/badge_yellow_text</item>
-    </style>
-    <style
-        name="purple_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/purple_badge</item>
-        <item
-            name="android:textColor">@color/badge_purple_text</item>
-    </style>
-</resources>
-```
-
-Static usage, with any label:
-
-```xml
-<TextView
-    style="@style/green_badge"
-    android:text="Active" />
-```
-
-Dynamic row binding:
-
-```java
-boolean active = model.isActive == 1;
-holder.status.setText(active ? "Active" : "Inactive");
-holder.status.setBackgroundResource(active ? R.drawable.green_badge : R.drawable.red_badge);
-holder.status.setTextColor(context.getColor(active ? R.color.badge_green_text : R.color.badge_red_text));
-```
-
-The text color is deliberately separate from the background. A drawable cannot set a TextView's text color. Changing only the background is insufficient.
-
-Material `ChipGroup` is allowed for automatic wrapping when Material Components is already available locally. Do not download it to add wrapping. Follow the exact list/chip design and icon rules in sections 18–19.
-
-## 7. Models and static session: complete files
-
-Use public fields and `TABLE_NAME`. The implicit public no-argument constructor supports reflection. SQL columns must match the fields selected by DBHelper. Do not invent tables just because a model exists. Fields shown here are sample data, not a required domain schema for every application.
-
-### `app/src/main/java/com/example/app/models/User.java`
-
-```java
-package com.example.app.models;
-
-public class User {
-    public static final String TABLE_NAME = "users";
-
-    public int id, age, creditPoints, isActive;
-    public String image, fullName, username, password, phone, gender, role, specialty;
-    public String email, location, joinedDate;
-}
-```
-
-### `app/src/main/java/com/example/app/models/StaticUserModel.java`
-
-```java
-package com.example.app.models;
-
-public class StaticUserModel {
-    public static User user;
-}
-```
-
-Set `StaticUserModel.user` after a successful login. This is an in-memory session and is lost when the process ends. Do not add preferences, tokens, encryption libraries, or a SessionHelper unless requested.
-
-For logout: show the confirmation modal, set `StaticUserModel.user = null` only on Confirm, show a success toast, then navigate to login with `Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK`. Use the real login Activity for that project. If immediate navigation prevents the toast from being seen, show that logout result in the destination Activity. Do not allow Back to reopen authenticated screens.
-
-## 8. DBHelper: exact reflection-based format
-
-Use `helpers.DBHelper extends android.database.sqlite.SQLiteOpenHelper`. No Room, ORM, repository, dependency injection, or external serialization library.
-
-- The reference uses `test.db`, version 2. Preserve the destination project's database name/version; update the version only for a requested schema migration.
-- The blank `onCreate`/`onUpgrade` below belongs only to this generic reference project, which has no specified domain schema. For a real application or machine problem, define its required tables in `onCreate`, then seed ALL created tables in dependency order. Include supporting entities needed by the workflows even if the problem gives no example records. For later schema changes, migrate and seed new tables in `onUpgrade` without dropping user data.
-- Read table names from public static `TABLE_NAME`.
-- Public fields map to columns. Supported stored types are String, int/Integer, double/Double. Static fields and `id` are skipped on writes. Use plain integer ID fields such as `userId`, `studentId`, or `subjectId` for relationships.
-- Keep the supplied `finalGrade` → `final` alias only if preserving this exact helper; do not add arbitrary model-specific aliases.
-- NEVER declare SQLite foreign keys: no `FOREIGN KEY`, `REFERENCES`, cascading rules, or enforced table links. Store plain `INTEGER` columns named `userId`, `studentId`, `subjectId`, `orderId`, and so on. The model has matching `int` fields. Do not add related-object fields such as `User user` or automatic nested-object loading; this DBHelper reads scalar fields only. When a screen needs a related record, fetch it explicitly by its stored ID.
-- A model needs a public no-argument constructor, including the implicit constructor when no other constructor is declared.
-- Use parameterized selections for values. Close cursors with try-with-resources. Do not swallow failures or show a success toast when the result is false.
-- Catch `ReflectiveOperationException` and relevant SQLite errors at the transaction boundary.
-- Do not add float, boolean, long, date, enum, or custom object storage without deliberately extending the mapper when the feature needs it.
-
-The following template is the original reflection helper format with only Android SDK and Java imports. Add schema and seed methods when implementing an actual problem. This blank template is not permission to omit required tables or seeders.
-
-### `app/src/main/java/com/example/app/helpers/DBHelper.java`
-
-```java
-package com.example.app.helpers;
-
-import android.content.ContentValues;
-import android.content.Context;
-import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-
-public class DBHelper extends SQLiteOpenHelper {
-    public DBHelper(Context context) {
-        super(context, "test.db", null, 2);
-    }
-
-    @Override
-    public void onCreate(SQLiteDatabase db) {
-
-    }
-
-    @Override
-    public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-
-    }
-
-    private String getTableName(Class<?> modelClass) throws ReflectiveOperationException {
-        return (String) modelClass.getField("TABLE_NAME").get(null);
-    }
-
-    private boolean isColumnType(Class<?> type) {
-        return type == String.class || type == int.class || type == Integer.class
-                || type == double.class || type == Double.class;
-    }
-
-    private String getColumnName(Field field) {
-        return field.getName().equals("finalGrade") ? "final" : field.getName();
-    }
-
-    private ContentValues toContentValues(Object model) throws IllegalAccessException {
-        ContentValues cv = new ContentValues();
-
-        for (Field field : model.getClass().getFields()) {
-            if (Modifier.isStatic(field.getModifiers()) || field.getName().equals("id")
-                    || !isColumnType(field.getType())) continue;
-
-            String column = getColumnName(field);
-            Object value = field.get(model);
-
-            if (value == null) cv.putNull(column);
-            else if (value instanceof String) cv.put(column, (String) value);
-            else if (value instanceof Integer) cv.put(column, (Integer) value);
-            else cv.put(column, (Double) value);
-        }
-
-        return cv;
-    }
-
-    private <T> T fromCursor(Cursor cursor, Class<T> modelClass) throws ReflectiveOperationException {
-        T model = modelClass.getDeclaredConstructor().newInstance();
-
-        for (Field field : modelClass.getFields()) {
-            if (Modifier.isStatic(field.getModifiers()) || !isColumnType(field.getType())) continue;
-
-            Class<?> type = field.getType();
-            int column = cursor.getColumnIndexOrThrow(getColumnName(field));
-            if (cursor.isNull(column) && !type.isPrimitive()) {
-                field.set(model, null);
-            } else if (type == String.class) {
-                field.set(model, cursor.getString(column));
-            } else if (type == int.class || type == Integer.class) {
-                field.set(model, cursor.getInt(column));
-            } else {
-                field.set(model, cursor.getDouble(column));
-            }
-        }
-
-        return model;
-    }
-
-    public boolean create(Object model) throws ReflectiveOperationException {
-        return getWritableDatabase().insert(
-                getTableName(model.getClass()), null, toContentValues(model)
-        ) != -1;
-    }
-
-    public boolean update(Object model, int id) throws ReflectiveOperationException {
-        return getWritableDatabase().update(
-                getTableName(model.getClass()), toContentValues(model),
-                "id = ?", new String[]{String.valueOf(id)}
-        ) > 0;
-    }
-
-    public boolean delete(Class<?> modelClass, int id) throws ReflectiveOperationException {
-        return getWritableDatabase().delete(
-                getTableName(modelClass), "id = ?", new String[]{String.valueOf(id)}
-        ) > 0;
-    }
-
-    public <T> T show(Class<T> modelClass, int id) throws ReflectiveOperationException {
-        try (Cursor cursor = getReadableDatabase().query(
-                getTableName(modelClass), null,
-                "id = ?", new String[]{String.valueOf(id)}, null, null, null
-        )) {
-            return cursor.moveToFirst() ? fromCursor(cursor, modelClass) : null;
-        }
-    }
-
-    public <T> ArrayList<T> get(Class<T> modelClass) throws ReflectiveOperationException {
-        ArrayList<T> models = new ArrayList<>();
-
-        try (Cursor cursor = getReadableDatabase().query(
-                getTableName(modelClass), null, null, null, null, null, "id DESC"
-        )) {
-            while (cursor.moveToNext()) {
-                models.add(fromCursor(cursor, modelClass));
-            }
-        }
-
-        return models;
-    }
-}
-```
-
-Public calls stay short:
-
-```java
-DBHelper db = new DBHelper(context);
-boolean created = db.create(user);
-boolean updated = db.update(user, user.id);
-boolean deleted = db.delete(User.class, user.id);
-User found = db.show(User.class, user.id);
-ArrayList<User> users = db.get(User.class);
-```
-
-These calls throw checked reflection errors and require tables to exist. The example above illustrates the signatures; invoke them inside the guarded transaction pattern below, not as unhandled statements.
-
-## 9. Transaction flow: mandatory modal and result toast
-
-Transactions are operations that change application/domain state: create, update, delete, cancel, submit, login/logout when applicable, or change a stored status. Opening a page, expanding a menu, displaying records, and pressing Cancel are not completed transactions.
-
-1. Validate the input relevant to the action.
-2. Show `AppModal.confirm` for a normal state change or `AppModal.danger` for a destructive one.
-3. Run the mutation ONLY inside the modal's Confirm action.
-4. Use the actual result: `AppToast.success` on success and `AppToast.error` on failure/exception.
-5. Refresh the affected list/screen only after success.
-6. Do not add a second confirmation, success modal, or fake progress delay.
-
-`AppModal` takes an Activity-backed Context. `AppToast` takes an Activity because the banner attaches to that screen. Do not pass an application Context or store an Activity statically. The Context/list-only rule applies to adapter constructors, not these helper methods.
-
-Example Activity method, using the exact helpers above:
-
-```java
-private void deleteUser(User user) {
-    AppModal.danger(this, "Delete user?", "This action cannot be undone.", () -> {
-        try (DBHelper db = new DBHelper(this)) {
-            if (db.delete(User.class, user.id)) {
-                AppToast.success(this, "User deleted", "The user was removed.");
-                refreshUsers();
-            } else {
-                AppToast.error(this, "Couldn’t delete user", "Please try again.");
-            }
-        } catch (ReflectiveOperationException | android.database.sqlite.SQLiteException error) {
-            AppToast.error(this, "Couldn’t delete user", "Please try again.");
-        }
-    });
-}
-```
-
-`refreshUsers()` means that screen's real data-loading method. Define it for the screen rather than leaving an unresolved call. Do not add a database deletion when the user asked only for an in-memory preview. Even an intentional preview mutation gets a modal and result toast; clearly label it as preview data.
-
-Normal confirmation and standalone feedback calls:
-
-```java
-AppModal.confirm(context, "Save changes?", "Confirm to save your changes.", () -> saveUser());
-AppToast.success(activity, "Changes saved", "Your changes were saved successfully.");
-AppToast.error(activity, "Couldn’t save", "Please try again.");
-```
-
-`saveUser()` is the feature's real operation; it must follow the same result/error handling as `deleteUser`. Literal text is used here for clarity. Put reusable/runtime labels in string resources in the actual application, and do not manufacture dozens of extra strings for unspecified features.
-
-## 10. RecyclerView adapter rules and concrete structure
-
-Use RecyclerView/LinearLayoutManager from the locally available AndroidX dependencies. They are allowed components, not an exception to an SDK-only rule. Prefer the dependency/version already in the destination project. Do not introduce a paging library, custom adapter DSL, or listener architecture for a small sample list unless the requested behavior needs it.
-
-- Model-specific adapter, a separate row XML, and a ViewHolder.
-- Fields follow `public Context context; public ArrayList<User> list;`.
-- Constructor is EXACTLY `UserAdapter(Context context, ArrayList<User> list)`.
-- Required methods are `onCreateViewHolder`, `onBindViewHolder`, `getItemCount`, and a ViewHolder constructor that binds row IDs.
-- Put row navigation and transaction handling inside the adapter. Pass a model ID via Intent to a real edit/detail Activity. Do not pass lambdas/consumers into the constructor or move the same callback to a setter as a workaround.
-- Refresh the hosting screen or update the list with the appropriate adapter notification after successful operations.
-- Reset visibility, image, text, badge background, and text color on EVERY bind when those values vary.
-- Keep passwords and other private credentials out of rows.
-- Do not create fake tables or edits for preview data.
-
-Constructor and creation must look like this:
-
-```java
-public UserAdapter(Context context, ArrayList<User> list) {
-    this.context = context;
-    this.list = list;
-}
-```
-
-```java
-RecyclerView recycler = findViewById(R.id.users_list);
-recycler.setLayoutManager(new LinearLayoutManager(this));
-recycler.setAdapter(new UserAdapter(this, users));
-```
-
-The complete approved person, item and activity row XML, bound IDs, drawables and styles appear in section 19. Use the correct one for the record type and preserve its visual design.
-
-## 11. Activity theme and offline component integration
-
-The helper templates need no custom Material theme overlay. A new SDK-only Activity can use the platform `Theme.Material.Light.NoActionBar` or its appropriate native theme. Material Components themes and AppCompat Activities are also allowed when their libraries are already available locally. Keep the existing project setup and theme compatible rather than rewriting them unnecessarily. The Android framework Theme.Material and the Material Components library are different options, both acceptable when usable offline.
-
-Example theme for a fresh native setup:
-
-```xml
-<resources>
-    <style
-        name="AppTheme"
-        parent="android:style/Theme.Material.Light.NoActionBar">
-        <item
-            name="android:fontFamily">sans</item>
-        <item
-            name="android:colorAccent">@color/success</item>
-        <item
-            name="android:windowLightStatusBar">true</item>
-    </style>
-</resources>
-```
-
-The modal template explicitly supplies its dimensions, backgrounds, buttons, and dim amount, so it does not rely on a missing external theme/style. Use the Activity's normal content root for the toast. Keep status-bar/inset handling appropriate to the target SDK; do not remove it merely to save lines if that puts controls behind system bars.
-
-## 12. List XML: deliberately pending
-
-Do NOT define new detailed rules for `list.xml` or model-specific row files yet. The user will go through these deeply later. General one-attribute-per-line formatting, reuse of the documented badges, and the offline-only requirement already apply. Do not add fields, menus, chip wrapping, or particular card layouts based on an unavailable screenshot. Obtain the user's actual list requirements when that work begins.
-
-## 13. Verification and handoff
-
-- Build after implementation changes with `./gradlew --offline :app:assembleDebug` or the destination project's existing offline equivalent. Never silently retry an offline failure with network access enabled.
-- For meaningful UI/transaction changes, inspect an available emulator/device and verify the action, Cancel behavior, success/error feedback, and list refresh as applicable.
-- Do not add tests that only mirror a trivial layout. Do not run unrelated broad checks after the relevant checks have passed.
-- Documentation-only changes do not require rebuilding the existing application. Embedded code templates should be checked for missing resources, offline dependency availability, valid XML, and compilation when practical. The platform-only helper templates must remain usable without additional UI libraries.
-- In the response, state what changed, what was verified, and any real limitation. Never claim a sample operation updated a database when it only changed an in-memory list.
-- Keep everything needed to transport these rules IN THIS FILE. Do not split instructions into another README, depend on a screenshot attachment, or reference another computer's filesystem for component implementations.
-
-## 14. Mandatory Activity naming and separation
-
-Every role-specific Activity must follow `<Role><ScreenOrAction>Activity` in PascalCase and live in that role's package. Use the correctly spelled role and screen names, with no spaces in class names.
-
-| Role | Package | Dashboard Activity | Dashboard layout |
+| Role | Resource | Size | Typical use |
 | --- | --- | --- | --- |
-| Admin | `admin` | `AdminDashboardActivity` | `activity_admin_dashboard.xml` |
-| Customer | `customer` | `CustomerDashboardActivity` | `activity_customer_dashboard.xml` |
-| Instructor | `instructor` | `InstructorDashboardActivity` | `activity_instructor_dashboard.xml` |
+| Page heading | `@dimen/type_page_heading` | 22sp | List/create/show page title, sheet heading |
+| Section heading | `@dimen/type_section_heading` | 20sp | Dashboard and detail section titles |
+| Card heading | `@dimen/type_card_heading` | 18sp | Person, item, or activity card title |
+| Body | `@dimen/type_body` | 14sp | Descriptions, search input, normal content |
+| Subheading | `@dimen/type_subheading` | 13sp | Supporting line below a heading, metadata |
+| Label | `@dimen/type_label` | 12sp | Field label, chip, badge, compact button label |
+| Detail | `@dimen/type_detail` | 11sp | Dense card facts |
+| Caption | `@dimen/type_caption` | 10sp | Timestamps and low-emphasis hints |
+| Display | `@dimen/type_display` | 28sp | Large dashboard greeting or count |
 
-**NEVER share one Activity between roles or distinct screen actions.** Similar appearances, fields, or logic do not justify combining screens.
+The same file also defines fixed exception tokens for existing components: `type_micro` (9sp), `type_button` (15sp), `type_body_large` (16sp), `type_person_name` (17sp), `type_card_heading_large` (19sp), `type_report_section` (21sp), `type_large_heading` (24sp), `type_report_title` (25sp), `type_metric` (26sp), `type_dashboard_greeting` (27sp), `type_modal_symbol` (36sp), `type_report_total` (46sp), and `type_auth_hero` (34sp) for the login/registration hero heading. These preserve the approved current XML exactly; reuse them only for the matching component. Do not resize the modal, toast, report total, or existing cards just to reduce the token count. When changing a text size intentionally, change the shared token if all uses should change; otherwise choose an existing role token or add a clearly named component token and document it here.
 
-- Each role gets its own dashboard Activity and screen layout. Do not create one `DashboardActivity` that switches behavior based on the logged-in user's role.
-- Create and update are separate Activities and separate screen layouts. Do not use an ID, Intent extra, boolean, mode, or conditional to turn one Activity into both a create screen and an update screen.
-- Detail/show screens are separate for each role. An admin's order detail screen must not be the same Activity or screen layout as a customer's order detail screen.
-- List/manage screens are separate per role as well. Do not combine admin management and customer viewing into one Activity with hidden controls.
-- Route explicitly to the correct role-specific Activity. Do not use a generic router Activity as the shared implementation of these screens.
-- Do not evade this rule by using one shared base Activity, Fragment, or included full-screen layout that contains the role-specific screen behavior and merely adding thin role wrappers.
-- Shared `DBHelper`, models, modal/toast helpers, badges, drawables, and small UI components remain reusable. This reuse must not merge screen ownership or actions.
-- The requirement for separate screens takes precedence over reducing the number of files or lines. Keep each screen's implementation short without combining it with another screen.
-- Register every created Activity in the manifest. Ordinary internal screens should not be exported unless an actual requested entry point requires it.
-- Only create the screens requested by the user. This naming rule is not authorization to generate every role's screens preemptively.
+## Login and registration pages
 
-Concrete examples:
+Use **two separate Activities and two separate layouts**: `SampleLoginActivity` with `layout/activity_sample_login.xml`, and `SampleRegisterActivity` with `layout/activity_sample_register.xml`. Role-specific equivalents also stay separate. Never use one Activity that changes modes to serve both screens, and never hide both forms inside one layout. Each link starts the other Activity; register both Activities in the manifest. `helpers/AuthPasswordVisibility.java` handles the login and registration password eye, while registration uses `ActivityResultContracts.GetContent()` to choose an image. Login is the launcher; remove `MainActivity`. Login checks local `DBHelper` users, assigns the signed-in user to `StaticUserModel.user`, then routes with a simple role check: `if ("Admin".equalsIgnoreCase(user.role))` open `AdminDashboardActivity`, otherwise open `PersonalDashboardActivity`. Registration creates a local user with role `Member` and opens the personal dashboard. `StaticUserModel` holds only the current in-memory session. Logout clears it and starts `SampleLoginActivity` directly, with no confirmation modal. No password hashing is needed for this hackathon.
 
-| Purpose | Activity | Screen layout |
-| --- | --- | --- |
-| Admin creates a user | `AdminCreateUserActivity` | `activity_admin_create_user.xml` |
-| Admin updates a user | `AdminUpdateUserActivity` | `activity_admin_update_user.xml` |
-| Admin manages orders | `AdminOrderListActivity` | `activity_admin_order_list.xml` |
-| Customer lists their orders | `CustomerOrderListActivity` | `activity_customer_order_list.xml` |
-| Admin shows an order | `AdminShowOrderActivity` | `activity_admin_show_order.xml` |
-| Customer shows an order | `CustomerShowOrderActivity` | `activity_customer_show_order.xml` |
-| Instructor creates a class | `InstructorCreateClassActivity` | `activity_instructor_create_class.xml` |
-| Instructor updates a class | `InstructorUpdateClassActivity` | `activity_instructor_update_class.xml` |
+Copy the **complete XML resources below** for the exact current appearance. Both pages use a 390dp hero with `auth_hero_gradient.xml`, which blends `primary_darkest` through `primary_dark` into `primary`. There is no scenic photo. Hero title text is white at `@dimen/type_auth_hero` (34sp), subtitle is `primary_light` at `type_body_large`, and the white back icon sits on the translucent `auth_back_background.xml`. The white `auth_sheet_background.xml` has 34dp rounded top corners and overlaps the hero by 34dp. The form uses labels **above every field**, 58dp pill inputs with `auth_field_background.xml` and the existing neutral field colors, inline email/lock icons, and a 60dp dark-primary pill action with `ic_auth_arrow.xml`. Use the exact spacing and ordering in each layout; preserve the Arial Rounded font and typography resources. Login includes email, password, forgot-password link, Sign In action, and Sign Up link. Registration includes a labeled profile-photo upload area using `form_upload_background.xml`, contained `fitCenter` preview, first/last name, email, password, confirmation, Create Account action, and Sign In link. Do not add the “Or continue with” section or Google/Facebook buttons. Keep the shared drawable colors resource-based so changes to `values/colors.xml` update both pages.
 
-For example, `AdminShowOrderActivity` and `CustomerShowOrderActivity` can both receive an `orderId` and use the same Order model/DBHelper. They still own separate layouts, actions, and role-appropriate behavior. Likewise, `AdminCreateUserActivity` and `AdminUpdateUserActivity` must remain separate even when their forms have matching fields.
+## Dashboard
 
-A truly role-independent entry screen such as login can retain a neutral name such as `LoginActivity`; do not duplicate it unless requested. This does not permit sharing authenticated role-specific screens.
+Use `layout/activity_admin_dashboard.xml` as the admin sample. Keep its greeting and notification bell in the fixed header above the scrollable content. The dark feature panel is a `ViewFlipper` with three full-card slides: Update, Items, and Activities. Each child keeps the 166dp rounded card, its own primary/badge background shade, inline fixed label/date/action text, and the highlighted dot and figure. Use `autoStart="false"`, `flipInterval="3900"`, and the platform fade-in/fade-out animations. Bind only the live item and activity counts from Java, start flipping in `onStart`, and stop in `onStop`; do not reintroduce a rotating `Runnable` or manually swap the same TextViews. Tapping the card opens Reports. The two overview metric boxes navigate to the existing item and person lists; the left box has the floating shadow treatment. Put the item-card RecyclerView first and the activity-card RecyclerView second. The **admin** item cards use a two-column grid in this RestaurantApp reference, while activity cards use a vertical list. The personal dashboard has a separate mandatory single-row horizontal featured list below. Both admin sections have headings, subheadings, and right-side count badges; the activity section has its own search and wrapping status chips. A destination project can explicitly require a different item-list orientation; preserve that project's latest user instruction while keeping the shared card styling. Use the XML's actual background drawables, color selectors, and styles rather than rebuilding approximations. `DashboardSampleActivity` is the older generic sample; the admin dashboard is the current visual reference.
 
-## 15. Offline availability checklist
+The initials avatar (`admin_avatar_button`) beside the notification bell opens the anchored `popup_admin_account.xml` menu. Keep its 188dp white rounded panel, subtle outline and elevation, text-only Profile and destructive-colored Logout buttons, and separator. Use `admin_account_menu_background.xml` with inline button text rather than a platform-default menu. Profile opens the separate role-owned `admin.AdminProfileActivity` and `activity_admin_profile.xml`, using the shared profile design described below. Register this Activity in the manifest. Logout clears `StaticUserModel.user` and starts `SampleLoginActivity` directly; do not show a confirmation modal. Do not put the account menu inside the notification drawer or make the avatar tap log out directly.
 
-The user's meaning of “no third parties” is **Android Studio without internet**, not a ban on AndroidX, Material, or a library that is already available locally. This clarification supersedes earlier SDK-only wording.
+## Personal dashboard and reusable CTA carousel
 
-Before using a component:
+Use `PersonalDashboardActivity` and `activity_personal_dashboard.xml` for the role-neutral sample; a real student, customer, patient, or member screen keeps its own role-named Activity and package. Preserve the exact layout hierarchy in the appendix. The white `dashboard_header_background.xml` header stays **outside** the `personal_content` ScrollView, with 22dp horizontal padding, page title/subtitle, 40dp solid bell, 40dp initials avatar, and a 50dp full-width rounded `menu_search_background.xml` search trigger 18dp below the title row. Keep the bell to the left of the avatar. Do not add the QR control. All later sections belong inside `personal_content`, leaving this header fixed.
 
-1. Inspect the destination project's Gradle configuration and installed SDK/build tools.
-2. Reuse the existing dependency version. Confirm the artifact and all transitive dependencies/plugins are locally cached or bundled; merely seeing a component in an IDE palette or knowing its Maven coordinates does not establish offline availability.
-3. Build with Gradle's `--offline` flag. A cached dependency is usable; an unresolved dependency must not trigger a download.
-4. If unavailable, use an already available component or the Android SDK fallback. Report the missing local artifact instead of silently enabling internet or installing packages.
-5. Verify the app's actual feature works with internet disabled. A successful offline compile does not prove that a runtime feature avoids network services.
+The header search is a **tap target**, not an EditText that types in place. Tapping any part opens `bottom_sheet_personal_search.xml` as a bottom drawer about 90% of the screen height, expanded on show. Preserve its rounded `dashboard_sheet_background.xml`, top handle, title and X, outlined 48dp `admin_outline_background.xml` search field with the search icon on the right, wrapping text-only `AdminStatusChip` filters, two-column `sample_item_card_list.xml` RecyclerView, and `view_empty_list.xml` zero-result state. Show All, the four 3/5/6/8 Seaters category chips, then any other categories actually present in the item data; update results immediately for both typing and chip selection. A dashboard seat-tile tap opens this same drawer with its matching seat chip already checked, while the header search opens with All checked. Search item name, category, detail, and tag; keep newest-first order and update the empty state. Reuse `ItemAdapter` and the existing local item source. Do not add an Add button or an admin-only filter to this personal search drawer.
 
-Examples:
+The current personal dashboard starts with the seat-category grid directly below the fixed header and has no large CTA banner. Add a banner only when a later request calls for one.
 
-| Allowed when available locally | Not allowed in this offline workflow |
-| --- | --- |
-| RecyclerView, LinearLayoutManager, AppCompat, ConstraintLayout | Downloading a new AndroidX version |
-| MaterialButton, MaterialCardView, MaterialAlertDialogBuilder, ChipGroup | Downloading Material Components to add a widget |
-| Android SDK APIs, XML drawables, system fonts, local assets | Downloading icons, fonts, images, or loading remote image URLs |
-| DBHelper with local SQLite, local files, local in-memory session | REST/GraphQL services, hosted databases, cloud authentication |
-| A useful preinstalled/cached third-party library with no runtime network requirement | A library whose artifacts are missing or whose feature requires an online API |
+Directly below the fixed header, keep the **staggered seat-category grid** in `activity_personal_dashboard.xml`. It has two equal-width columns with a 10dp gutter and four visible `view_personal_seat_tile.xml` cards: 3 Seaters at top left (224dp high), 5 Seaters at top right (172dp), 6 Seaters at bottom left (172dp), and 8 Seaters at bottom right (224dp), with 10dp between each column's cards. This is the intentional unequal-height pattern from the reference; do not flatten it into equal grid cells or let it cover the sections below. Each rounded tile keeps its title as a fixed `TextView` above a `ViewFlipper` that fades between **two different vehicle photos**. Set `autoStart="false"` and `flipInterval="8000"`; start the four flippers in 3/5/6/8 order with 0/2/4/6-second offsets, then cancel pending starts and stop flipping in `onStop`. The two-second gap remains consistent across cycles. Do not bind the same photo twice or simulate the change with a zoomed crop. Set the fixed seat titles inline in XML. Copy all eight local binary assets from `drawable-nodpi`: `personal_seats_3.jpg` and `personal_seats_3_alt.jpg`, `personal_seats_5.jpg` and `personal_seats_5_alt.jpg`, `personal_seats_6.jpg` and `personal_seats_6_alt.jpg`, and `personal_seats_8.jpg` and `personal_seats_8_alt.jpg`. Make each whole seat tile tappable and open the item search drawer with the corresponding 3/5/6/8 Seaters chip selected. Filter the displayed items through the same category-chip path used by manual selection, and show the shared empty state when the current item source has no matching category.
 
-No change to the requested Java/XML architecture, DBHelper format, adapter constructor rule, modal/toast flow, or role-separated Activities is implied by allowing locally available libraries. Keep implementations short and reuse the components the computer already has.
+Below the seat grid, keep **Featured Items first and Activities second**. Featured Items has the section heading, subheading, right-side count badge, then exactly **one horizontally scrolling RecyclerView row**. Use `FeaturedItemAdapter` in `adapters`, which reuses `ItemAdapter` binding and `sample_item_card_list.xml` with 240dp-wide cards; use a horizontal `LinearLayoutManager`. Never use a two-column grid, wrap to a second row, or add a featured-item search field. Keep cards in newest-first order. Use `view_empty_list.xml` if no featured items exist.
 
-## 16. ItemCard convention
+Activities has the matching heading/subheading/count badge below Featured Items, then its **own** outlined 48dp search field, search icon on the right, wrapping text-only `AdminStatusChip` group (All, Online, In person), and a vertical `sample_activity_card_list.xml` RecyclerView with `ActivityCardAdapter`. Search and chip selection filter the activity cards together; update the count and show `view_empty_list.xml` for zero results. Keep default newest-first order and do not let activity search affect Featured Items or the header search drawer. Bind counts from actual visible data, never from the XML preview placeholders. Copy the sample row XML, badge styles, `AdminStatusChipTheme`, font, typography, colors, and referenced drawables so the rendered cards match rather than substituting plain TextViews.
 
-The generic item-card component is named **ItemCard**, implemented by `res/layout/sample_item_card_list.xml`. Use it for products, foods, animals, and similar image-led item records. The user clarified that this must keep the original VERTICAL shopping-card design, scaled down into a small tile: photo above details, price/action below. Preview multiple tiles using a two-column RecyclerView grid. The vertical card must stay vertical and compact. A separate `horizontal_sample_item_card_list.xml` variant is also kept and approved by the user; preserve both variants. Do not use an oversized full-screen hero card. The size fix belongs in sample_item_card_list.xml itself, not only in MainActivity. It is distinct from the generic person row `sample_person_list.xml`. The sample `Item` model and `ItemAdapter(Context context, ArrayList<Item> list)` demonstrate binding without authorizing an items table. All preview photos are local assets; never use remote image URLs. Complete portable layout XML and supporting resources are embedded in section 19.
+The personal bell and avatar use the **same interactions and resources as the admin header**. Bell tint uses `dashboard_bell_tint.xml`: neutral when empty, colored when notifications exist; show the pulsing destructive-red dot only when nonempty. Bell tap opens `bottom_sheet_notifications.xml` with `NotificationAdapter` and `sample_notification_list.xml`; X uses the danger confirmation modal and removal updates the sheet, empty state, and bell from the same list. Initials tap opens the anchored `popup_admin_account.xml` Profile/Logout menu. Profile opens the separate `PersonalProfileActivity` with `activity_personal_profile.xml`, using the shared profile design described below with personal data. Logout clears `StaticUserModel.user` and starts `SampleLoginActivity` directly. Register the profile Activity in the manifest. The account model is `StaticUserModel.user`; use it for session-aware identity data.
 
-## 17. ActivityCard convention
+## Profile pages
 
-The generic **ActivityCard** layout is `res/layout/sample_activity_card_list.xml`, intended for appointments, invitations, requests, orders, payments, bookings, and similar activity/transaction records. It is a compact white/lavender card with a leading type icon, title and subtitle, colored type/status badge, wrapping date/time/mode chips, organizer identity, overflow button, and primary/secondary actions. Invitation placeholders use purple, Decline, and Accept. Bind actual labels, colors, metadata, and actions for the record type; do not assume every record is an invitation. Mutating actions still require AppModal confirmation and AppToast result feedback. The sample XML is a visual template, not authorization to create tables, backend operations, or additional Activities. Complete portable layout XML and supporting resources are embedded in section 19.
+Use separate `activity_admin_profile.xml` and `activity_personal_profile.xml` layouts and role-owned Activities. Each page has a back/title header above a scrollable white rounded card on the neutral background. The card starts with a 152dp primary-gradient cover, an 80dp initials avatar overlapping its lower edge, left-aligned name/email, and one pale rounded Role/Access/Status facts panel using `PersonFactColumn`, `PersonFactLabel`, and `PersonFactValue`. Below a divider, show Public profile with labels above the name and email fields using `form_field_background.xml` and small inline error text. Another divider separates a Notifications preference and a Log out row. End with Cancel and Save changes buttons. Keep the exact XML hierarchy, resource colors, Arial Rounded font, and fixed typography sizes in the appendix.
 
-## 18. Role-specific list screen naming and layout
+The sample profile edits name, email, and the notification preference in local `SharedPreferences` for its role. Save only after the confirmation modal, validate name and email with inline errors, update the visible identity and initials after persistence, and show the approved toast after success. Cancel and back discard unsaved edits. Log out clears `StaticUserModel.user` and starts Login immediately, without a modal. Authentication uses the local users table.
 
-Name every list Activity `RoleListNameActivity`, where ListName includes the entity followed by `List`: `AdminMenuListActivity`, `CustomerOrderListActivity`, `InstructorAppointmentListActivity`. Use the correctly spelled `Activity` suffix. Put the class in its role package, such as `admin`, and name its dedicated layout `activity_admin_menu_list.xml`. This rule supersedes earlier list names such as AdminManageOrdersActivity or CustomerOrdersActivity. Never share a list Activity or its full-screen layout between roles.
+## List pages and reusable rows
 
-EVERY `*ListActivity` MUST follow this same screen design and vertical order, across all roles and record types, unless the user explicitly requests a different design. This is the required list-screen template, not merely a menu example. Adapt the title, search hint, category labels/icons, counts, and row content to the entity. Keep the shared visual structure consistent.
+Name a list Activity `RoleEntityListActivity`, for example `AdminMenuListActivity` or `AdminPersonListActivity`. The page has a back/title/add header, rounded outlined search field with a search vector on the right, wrapping `ChipGroup` below it, RecyclerView, and the shared empty state. Use `activity_admin_menu_list.xml` and `activity_admin_person_list.xml` for exact XML. Chips are text-only: never put icons on chips. A filter group uses exactly one dimension. Choose it by priority: (1) Category, (2) Status, (3) Type, (4) other attributes such as seats. Use the highest-priority dimension available for that list; never mix category and status or other dimensions in one group. An `All` chip is allowed. Render flexible values from the Activity when appropriate, as the person and dashboard examples do. Use `AdminStatusChipTheme`, `AdminStatusChip`, the color selectors in `res/color`, and `admin_outline_background.xml` rather than custom visual approximations. Add uses `AppCompatButton` with the existing gradient `item_action_background.xml`.
 
-Use a white screen, back arrow, centered bold entity title, and green rounded Add button when that role can create records. Omit Add when creation is unavailable to that role; never show an unauthorized or fake action. The menu example uses Menu Items and Add Item. Beneath the header, place a pale gray rounded search field with a search icon and a separate outlined circular filter/sort button. Below that use a wrapping Material ChipGroup with singleSelection and selectionRequired. Always include All; use categories or statuses relevant to the list. Menu examples are Food, Drinks, Desserts, Breakfast, Lunch, Dinner. Do not copy food categories into unrelated lists. Each chip MUST have a local vector icon that depicts its actual label or category: a grid for All, fork/food for Food, cup for Drinks, leaf for Desserts, sun for Breakfast, serving dish for Lunch, and moon for Dinner. For other lists choose equally specific icons, such as person for Users, box for Products, paw for Pets, calendar for Appointments, receipt for Orders, or payment card for Payments. Draw a small matching Android vector when one is missing; do not reuse an unrelated icon merely because it already exists. Each chip has a label and count. Selected chips are pale green with dark green text/icons; unselected chips are pale gray with dark text/icons. Counts must reflect the actual sample/data set, never copy unrelated screenshot totals. Count the same collection that the screen displays.
+Match each record to its row type, exactly: people use `sample_person_list.xml` (white outlined card, avatar with no red profile dot, name/email, status/date, role/specialty tags, grouped fact panel, Edit/Delete quick actions); tangible items or animals use `sample_item_card_list.xml` (image-led item card); appointments, orders, requests, and events use `sample_activity_card_list.xml` (activity card). The personal featured section uses its specified 240dp `sample_item_card_list.xml` cards in one horizontal row. Reuse their background drawables, badge styles, and fonts. Do not substitute a plain TextView row. Default sorting is newest first. The shared empty layout appears when a filter or search finds nothing.
 
-Place a RecyclerView directly BELOW the ChipGroup, filling the remaining height with layout_height="0dp" and layout_weight="1" in a vertical LinearLayout. Do not replace it with repeated static rows or place it inside a ScrollView. Use the appropriate reusable row; the menu example uses a two-column grid of compact sample_item_card_list tiles. Search and category filters update the adapter list without changing newest-first order. Newly created records appear at the TOP immediately after a successful create, including when returning from a create screen. Show an empty-state message when there are no matching records. Keep adapter constructors limited to Context and list. Actual create/update actions use separate role-specific screens and retain modal/toast transaction rules; a visual sample does not authorize a database schema or a full create form.
+## Create/edit and show pages
 
-Portable visual measurements for every ListActivity: use system sans-serif, 16dp horizontal screen padding and status/navigation-bar insets. Header is 64dp high; back icon button is 40dp, title is bold 22sp in #101A23, Add button is 44dp high with 100dp corners, #08783F background, white 12sp text and an 18dp plus icon. The search/filter row is 52dp high, 12dp below the header; search fills remaining width, uses #F5F6F8 background with 100dp corners, 18dp horizontal padding, 24dp search icon, 12dp drawable spacing, 14sp text and #8B929E hint. The filter button is a 52dp white circle with a 1dp #EEF0F3 outline, 10dp start gap and a green local vector filter icon. ChipGroup sits 16dp below search, with 6dp horizontal and 2dp vertical chip spacing and 8dp bottom margin. Chips wrap naturally, have 40dp minimum height, 100dp corners, 12sp text, 20dp local icons and no stroke. Selected colors are #E6F7EE background and #08783F text/icon; unselected colors are #F5F6F8 background and #18232F text/icon. RecyclerView fills the remaining screen, clips no bottom padding and has 16dp bottom padding. Choose the approved row layout for the entity: person rows and activity cards use a vertical LinearLayoutManager; compact vertical item tiles use a two-column GridLayoutManager. Keep all XML attributes on separate lines and use existing locally available components without adding downloads or unnecessary layers.
+Use `activity_sample_create_page.xml` for forms: back/title/Save header, white form card on the neutral page background, folder heading, dashed upload area and contained image preview, two-column short fields, description area, date/time fields, spinner, text-only multi-select chips, status radio controls, checkbox, and small error text under required input. Reuse `form_field_background.xml`, `form_upload_background.xml`, `form_action_solid.xml`, the style definitions consolidated into `styles.xml`, and the included vectors. Keep image scaling contained so the chosen photo is not cropped. Edit pages follow the same layout and prefill fields; do not redesign them.
 
-## 19. Required list type mapping and complete portable XML
+Use `activity_admin_item_show.xml` for an item show page: edge-to-edge image hero, circular back/favorite controls over the photo, a white sheet overlapping the image with rounded top corners, left-aligned title, compact rating/location line, one pale rounded facts panel, and a fixed bottom price/share bar. Match `sample_person_list.xml` by using `person_facts_background.xml` and the `PersonFactColumn`, `PersonFactLabel`, and `PersonFactValue` styles: each of four columns has a muted label above a dark value, with no separate tile borders. Bind Category, Details, Tag, and Status from the item. Put an About section immediately below the facts panel, with a heading and the item description; use “About this vehicle” for vehicle items and “About this item” otherwise. Keep the Arial Rounded font and primary palette, and reuse the confirmation modal/toast for favorite changes. Use `activity_sample_activity_show.xml` for activity/order/appointment/rental details. Preserve its fixed back/reference header, scrollable icon and centered hero title/subtitle, separate white outlined cards, green section headings, label/value rows with right-aligned values, pill badges, dividers, and comments/notes card. Rename the headings and bind domain values as needed, and add rows or cards for extra fields using the same `ActivityShowCard`, `ActivityShowHeading`, `ActivityShowRow`, `ActivityShowLabel`, `ActivityShowValue`, and `ActivityShowValueBadge` styles. Keep the hero visible at the initial scroll position. Never collapse a section such as payment/fees into one multiline TextView or replace structured rows with plain text. Bring over the referenced styles, badge drawables, icon assets, typography, font, and green palette; keep the neutral page background from the sample. Before finishing, compare the rendered page at the top and after scrolling with the sample XML/reference image and correct visible differences in hierarchy, color, spacing, alignment, and badges. Do not claim a visual match from compilation alone.
 
-Choose the row by what each record represents, not by the screen title or the role. These mappings are mandatory unless the user explicitly requests another design. The exact section 19 XML is the implementation source of truth, not loose inspiration:
+## Notifications, modal, toast, and reports
 
-| Record type | Required row layout | RecyclerView layout |
-| --- | --- | --- |
-| People: users, customers, staff, admins, trainers, instructors, members | `sample_person_list.xml` | Vertical LinearLayoutManager |
-| Items: products, foods, animals, pets, dogs, cats, inventory, and similar image-led records | `sample_item_card_list.xml` | Two-column GridLayoutManager with compact vertical tiles |
-| Appointments, invitations, requests, orders, payments, bookings, and similar events/transactions | `sample_activity_card_list.xml` | Vertical LinearLayoutManager |
+The header bell is solid, on the left of the avatar. It is plain/neutral when the notification list is empty; with notifications it uses the primary color and a pulsing red dot. Clicking opens `bottom_sheet_notifications.xml` with a RecyclerView. Each row uses `sample_notification_list.xml`: dark green circle with the SAME white `ic_dashboard_bell` icon for every notification, title, message, relative time, and a right-side X. X opens the existing danger confirmation modal before removal. Feed the sheet from the same list used to set the bell state; update both after removal. This is the in-app notification drawer. The top toast is a separate in-app overlay defined by `toast_banner.xml`.
 
-For example, a dog catalogue uses ItemCard, but a veterinary appointment for a dog uses ActivityCard. A customer directory uses PersonCard, but that customer's orders use ActivityCard. Every list loads the latest created data first: for SQLite use `ORDER BY createdAt DESC, id DESC` when a reliable creation timestamp exists, otherwise `ORDER BY id DESC`. Bind the ordered result to RecyclerView and preserve this order after filtering and refreshing; do not display an unsorted query or stale seed data after a successful create. The approved `horizontal_sample_item_card_list.xml` is an optional item-row variant when the requested screen calls for horizontal cards. Preserve it; do not silently replace the default vertical item tiles with horizontal rows.
+Reports use `activity_sample_report_page.xml`, `report_bar_row.xml`, and their existing drawables. Keep the primary palette, compact data presentation, and gradient PDF action. Every summary metric outside the large total card and chart uses a structured horizontal row: label on the left, value right-aligned at the opposite edge. Reuse a row XML/style for repeated metrics, including collections, fees, fleet, and staff counts; bind the individual TextViews from data. Do not assemble report sections as newline-separated text in one TextView or use spaces to align labels and values.
 
-Every list screen still uses the section 18 header → search/filter → wrapping category/status ChipGroup → RecyclerView structure. Adapt labels and visible metadata to the domain. Animal cards must show relevant animal details rather than calories/prices copied blindly from the food placeholder. An order card must show order status and order actions rather than invitation labels. Only show applicable actions and fields; keep the same visual design and bind actual data. Preserve the row hierarchy, dimensions, corner radii, margins, padding, borders, palette, typography, icon positions and button placement from the approved XML. Do not replace the RecyclerView row with a newly invented card, alter the person/item/activity card structure, or use a different drawable/style just because it is easier. Adapt labels, local images, badges and icon meanings while keeping the approved look. If a field does not apply, hide its existing view and rebalance only the necessary spacing; do not silently redesign the entire row. Render the real RecyclerView on an emulator or Android Studio preview and compare with the embedded XML/visual measurements before finishing.
+## Mandatory report download
 
-### Appearance to reproduce
+Every report screen requested by the user must include a working **Download PDF** action, unless the user explicitly says the button is visual-only. A click must open Android's document picker with `ActivityResultContracts.CreateDocument("application/pdf")`, generate a real PDF using `android.graphics.pdf.PdfDocument`, and write the bytes to the returned URI through `getContentResolver().openOutputStream(uri)`. Do not leave the button unwired, show a preview-only toast, produce an empty file, or save a screenshot/image with a `.pdf` extension. The current `SampleReportPageActivity.java` is the minimal working reference; adapt its report content and package name to the destination project. A role-owned report Activity, such as `AdminReportActivity`, belongs in the `admin` package. A shared PDF helper, if needed for multiple screens, belongs in `helpers`, never in the base package.
 
-PersonCard: white rounded card with a faint mint/white gradient, 20dp corners, 1dp #DDF2EA border, 18dp internal padding and 8dp vertical spacing. Top row has a 56dp circular photo or initials fallback, bold 18sp name, gray 13sp role and colored status badge. Under it, metadata wraps as 11sp gray/mint pills with local vector icons, alongside a 48dp arrow/action button. Preserve wrapping; do not stretch the card into a full-screen panel.
+The PDF must contain the report title, selected period/filter if present, totals, category/status breakdown, and actual displayed figures. Load figures from the app's current local data or its explicit sample seeder; do not export unrelated hardcoded numbers. Export the styled `reportContent` view so the PDF retains the screen's cards, palette, typography, chart, and left-label/right-value rows. Do not build a second plain-text `List<String>` report and draw its lines with `Canvas.drawText`; that produces a visually different document and can drift from the live screen. The simple sample draws the report content view onto an A4-sized `PdfDocument.Page` with a calculated scale. If content is too long to read at that scale, paginate it rather than silently clipping it. When choosing a page break from child-view edges, compare every edge against the original page-height limit and take the *last* edge that fits; shrinking the limit during the scan causes one section per page and large blank areas. Render and inspect every PDF page, checking that no card or text is clipped and pages are reasonably filled. On a canceled picker result, do nothing. On success, close the stream and PDF and show the approved success toast; on failure, close resources and show the approved error toast. Exporting a PDF itself does not require a danger confirmation modal because it does not change application data.
 
-ItemCard: compact vertical shopping tile with 16dp corners, 1dp #E1ECE6 border and 6dp margins. Photo is above details and exactly 112dp high, center-cropped with 12dp image corners; overlay a small availability badge at top-left and a 28dp favorite button at top-right. Body padding is 10dp, name bold 14sp, category gray 11sp, metadata pills and rating/location 10sp. Footer has bold 16sp price and a 32dp green rounded View Details button. Keep the tile small enough for a two-column grid; never use a full-screen hero photo/card.
+Minimum Activity pattern:
 
-ActivityCard: compact white/lavender gradient card with 20dp corners, 1dp #EEF0F5 border, 16dp padding and 8dp vertical margins. Header uses a 48dp rounded lavender icon panel, bold 16sp title, gray 12sp subtitle and 32dp overflow button. Metadata wraps in a ChipGroup 14dp below the header, using a colored badge plus date, time and location/mode pills. Footer sits 16dp below metadata, with 34dp organizer avatar/initials, bold 12sp name, gray 10sp role, and two 36dp rounded buttons. Invitation examples use an outlined gray Decline button and purple gradient Accept button. Choose badges/actions appropriate to the actual record type.
+```java
+import android.graphics.Canvas;
+import android.graphics.pdf.PdfDocument;
+import android.view.View;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
+import java.io.OutputStream;
 
-### How to recreate these templates from this file alone
-
-The following are complete XML files copied from the approved project templates, including supporting styles, strings, selectors, backgrounds and native vector icons. No original project or screenshot is required. Use the destination app's existing offline-available AndroidX/Material setup; all XML attributes remain one per line and source has no comments. Merge resources by name into existing values files. Do not duplicate resources already recreated from earlier sections; these blocks include shared resources again to make the list templates self-contained. Android framework references and locally available Material widget styles come from those installed libraries.
-
-The food text, dates and initials are preview placeholders; replace them through adapter binding for actual records. The original burger photograph is a local bitmap and cannot be carried by this Markdown file. If a suitable local image is available, use it instead of the `sample_item_photo.xml` fallback below. Otherwise the included native vector picture placeholder makes the row compile and preview without downloading anything. Never define both a bitmap and XML drawable with the same resource name.
-
-The screen XML is the AdminMenuListActivity example. Recreate a separately owned layout for each role/entity screen, adapting its title, search hint and chips while retaining the structure. Use a plain model with public fields, a RecyclerView adapter with ONLY Context and list constructor arguments, and inflate the selected row with `inflate(R.layout.sample_person_list, parent, false)` or the corresponding item/activity row. Bind every dynamic field and reset visibility, badges and icons on each bind to avoid recycled content. The XML alone does not implement transactions. Wire authorized mutations through AppModal before execution and AppToast after the actual result; keep SQLite work in DBHelper.
-
-### `app/src/main/res/layout/sample_person_list.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="20dp"
-    android:layout_marginVertical="8dp"
-    app:cardCornerRadius="20dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="#DDF2EA"
-    app:cardBackgroundColor="#FFFFFF">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/modal_card"
-        android:orientation="vertical"
-        android:padding="18dp">
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-            <FrameLayout
-                android:layout_width="56dp"
-                android:layout_height="56dp">
-                <TextView
-                    android:id="@+id/user_initials"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:background="@drawable/user_avatar_background"
-                    android:gravity="center"
-                    android:text="@string/sample_user_initials"
-                    android:textSize="22sp"
-                    android:textStyle="bold"
-                    android:textColor="#08784F" />
-                <com.google.android.material.imageview.ShapeableImageView
-                    android:id="@+id/user_image"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="centerCrop"
-                    android:visibility="gone"
-                    app:shapeAppearanceOverlay="@style/UserAvatarShape" />
-            </FrameLayout>
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="16dp"
-                android:orientation="vertical">
-                <TextView
-                    android:id="@+id/user_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/sample_user_name"
-                    android:textColor="#182231"
-                    android:textSize="18sp"
-                    android:textStyle="bold" />
-                <TextView
-                    android:id="@+id/user_role"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/sample_user_role"
-                    android:textSize="13sp"
-                    android:textColor="#687582" />
-            </LinearLayout>
-            <TextView
-                android:id="@+id/user_status"
-                style="@style/green_badge"
-                android:layout_marginStart="8dp"
-                android:text="@string/user_active" />
-        </LinearLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-            <com.google.android.material.chip.ChipGroup
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                app:chipSpacingHorizontal="8dp"
-                app:chipSpacingVertical="10dp">
-                <TextView
-                    android:id="@+id/user_phone"
-                    style="@style/UserDetail"
-                    android:drawableStart="@drawable/ic_user_phone"
-                    android:text="@string/sample_user_phone" />
-                <TextView
-                    android:id="@+id/user_credits"
-                    style="@style/UserDetail.Green"
-                    android:drawableStart="@drawable/ic_user_credits"
-                    android:text="@string/sample_user_credits" />
-                <TextView
-                    android:id="@+id/user_age"
-                    style="@style/UserDetail"
-                    android:drawableStart="@drawable/ic_user_calendar"
-                    android:text="@string/sample_user_age" />
-                <TextView
-                    android:id="@+id/user_location"
-                    style="@style/UserDetail.Green"
-                    android:drawableStart="@drawable/ic_user_location"
-                    android:text="@string/sample_user_location" />
-                <TextView
-                    android:id="@+id/user_email"
-                    style="@style/UserDetail"
-                    android:drawableStart="@drawable/ic_user_email"
-                    android:text="@string/sample_user_email" />
-                <TextView
-                    android:id="@+id/user_reference"
-                    style="@style/UserDetail.Green"
-                    android:drawableStart="@drawable/ic_user_id"
-                    android:text="@string/sample_user_id" />
-                <TextView
-                    android:id="@+id/user_joined"
-                    style="@style/UserDetail"
-                    android:drawableStart="@drawable/ic_user_calendar"
-                    android:text="@string/sample_user_joined" />
-                <TextView
-                    android:id="@+id/user_specialty"
-                    style="@style/UserDetail.Green"
-                    android:drawableStart="@drawable/ic_user_certificate"
-                    android:text="@string/sample_user_specialty" />
-            </com.google.android.material.chip.ChipGroup>
-            <ImageButton
-                android:id="@+id/user_actions"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="10dp"
-                android:background="@drawable/user_detail_background"
-                android:src="@drawable/ic_user_chevron" />
-        </LinearLayout>
-    </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
+ActivityResultLauncher<String> savePdf = registerForActivityResult(
+        new ActivityResultContracts.CreateDocument("application/pdf"), uri -> {
+            if (uri == null) return;
+            View content = binding.reportContent;
+            PdfDocument pdf = new PdfDocument();
+            try (OutputStream out = getContentResolver().openOutputStream(uri)) {
+                PdfDocument.Page page = pdf.startPage(
+                        new PdfDocument.PageInfo.Builder(595, 842, 1).create());
+                Canvas canvas = page.getCanvas();
+                canvas.translate(24, 24);
+                float scale = Math.min(547f / content.getWidth(), 794f / content.getHeight());
+                canvas.scale(scale, scale);
+                content.draw(canvas);
+                pdf.finishPage(page);
+                pdf.writeTo(out);
+                AppToast.success(this, "PDF saved", "Your report is ready.");
+            } catch (Exception e) {
+                AppToast.error(this, "Save failed", "Please try again.");
+            } finally {
+                pdf.close();
+            }
+        });
+binding.reportDownload.setOnClickListener(v -> savePdf.launch("report.pdf"));
 ```
 
-### `app/src/main/res/layout/sample_item_card_list.xml`
+The report XML in the appendix provides `report_content` and `report_download`. Reuse `report_download_background.xml` and `ic_report_download.xml` for the exact button appearance. Before handoff, use the button on a device/emulator when available, choose a destination, and confirm the saved file opens as a nonempty PDF with the expected data. An offline build alone does not verify PDF output.
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="6dp"
-    android:layout_marginVertical="6dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="#E1ECE6"
-    app:cardBackgroundColor="#FFFFFF"
-    xmlns:tools="http://schemas.android.com/tools"
-    tools:layout_width="180dp">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
-        <FrameLayout
-            android:layout_width="match_parent"
-            android:layout_height="112dp">
-            <com.google.android.material.imageview.ShapeableImageView
-                android:id="@+id/item_image"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:src="@drawable/sample_item_photo"
-                app:shapeAppearanceOverlay="@style/ItemPhotoShape" />
-            <ImageButton
-                android:id="@+id/item_favorite"
-                android:layout_width="28dp"
-                android:layout_height="28dp"
-                android:layout_gravity="top|end"
-                android:layout_margin="5dp"
-                android:padding="7dp"
-                android:background="@drawable/user_avatar_background"
-                android:backgroundTint="#F2F0ED"
-                android:src="@drawable/ic_item_heart" />
-            <TextView
-                android:id="@+id/item_status"
-                style="@style/green_badge"
-                android:layout_gravity="top|start"
-                android:text="@string/item_available"
-                android:textSize="9sp"
-                android:layout_marginStart="5dp"
-                android:layout_marginTop="5dp" />
-        </FrameLayout>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="10dp">
-            <TextView
-                android:id="@+id/item_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/sample_item_name"
-                android:textSize="14sp"
-                android:textStyle="bold"
-                android:textColor="#10182B"
-                android:maxLines="2"
-                android:ellipsize="end" />
-            <TextView
-                android:id="@+id/item_category"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/sample_item_category"
-                android:textSize="11sp"
-                android:textColor="#8191A1" />
-            <com.google.android.material.chip.ChipGroup
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                app:chipSpacingHorizontal="6dp"
-                app:chipSpacingVertical="4dp">
-                <TextView
-                    android:id="@+id/item_detail"
-                    style="@style/ItemChip.Info"
-                    android:drawableStart="@drawable/ic_item_food"
-                    android:text="@string/sample_item_detail" />
-                <TextView
-                    android:id="@+id/item_tag"
-                    style="@style/ItemChip.Tag"
-                    android:drawableStart="@drawable/ic_item_leaf"
-                    android:text="@string/sample_item_tag" />
-            </com.google.android.material.chip.ChipGroup>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:id="@+id/item_rating"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:drawableStart="@drawable/ic_item_star"
-                    android:drawablePadding="4dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/sample_item_rating"
-                    android:textSize="10sp"
-                    android:textColor="#526375" />
-                <View
-                    android:layout_width="1dp"
-                    android:layout_height="10dp"
-                    android:layout_marginHorizontal="5dp"
-                    android:background="#DDE5EA" />
-                <TextView
-                    android:id="@+id/item_location"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/sample_item_location"
-                    android:textSize="10sp"
-                    android:textColor="#526375" />
-            </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:id="@+id/item_price"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="4dp"
-                    android:text="@string/sample_item_price"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#10182B" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/item_view_details"
-                    android:layout_width="wrap_content"
-                    android:layout_height="32dp"
-                    android:minWidth="0dp"
-                    android:background="@drawable/item_action_background"
-                    android:backgroundTint="@null"
-                    app:backgroundTint="@null"
-                    android:paddingHorizontal="8dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/item_view_details"
-                    android:textColor="#FFFFFF"
-                    android:textSize="10sp"
-                    android:textAllCaps="false"
-                    app:icon="@drawable/ic_user_chevron"
-                    app:iconTint="#FFFFFF"
-                    app:iconGravity="textEnd"
-                    app:iconPadding="2dp"
-                    app:iconSize="12dp" />
-            </LinearLayout>
-        </LinearLayout>
-    </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
-```
+## Binary assets required for the exact appearance
 
-### `app/src/main/res/layout/horizontal_sample_item_card_list.xml`
+XML cannot contain the bitmap and font bytes. Copy these files byte-for-byte into the same resource folders when reproducing the design. The seat grid and item cards need the images; all text needs the font. Launcher assets complete the app icon.
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="16dp"
-    android:layout_marginVertical="6dp"
-    app:cardCornerRadius="16dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="#E1ECE6"
-    app:cardBackgroundColor="#FFFFFF">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="12dp">
-        <FrameLayout
-            android:layout_width="96dp"
-            android:layout_height="110dp">
-            <com.google.android.material.imageview.ShapeableImageView
-                android:id="@+id/item_image"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="centerCrop"
-                android:src="@drawable/sample_item_photo"
-                app:shapeAppearanceOverlay="@style/ItemPhotoShape" />
-            <ImageButton
-                android:id="@+id/item_favorite"
-                android:layout_width="30dp"
-                android:layout_height="30dp"
-                android:layout_gravity="top|end"
-                android:layout_margin="5dp"
-                android:padding="7dp"
-                android:background="@drawable/user_avatar_background"
-                android:backgroundTint="#F2F0ED"
-                android:src="@drawable/ic_item_heart" />
-            <TextView
-                android:id="@+id/item_status"
-                style="@style/green_badge"
-                android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginBottom="5dp"
-                android:text="@string/item_available"
-                android:textSize="9sp" />
-        </FrameLayout>
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="12dp"
-            android:orientation="vertical">
-            <TextView
-                android:id="@+id/item_name"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/sample_item_name"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:textColor="#10182B" />
-            <TextView
-                android:id="@+id/item_category"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="3dp"
-                android:text="@string/sample_item_category"
-                android:textSize="12sp"
-                android:textColor="#8191A1" />
-            <com.google.android.material.chip.ChipGroup
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                app:chipSpacingHorizontal="6dp"
-                app:chipSpacingVertical="4dp">
-                <TextView
-                    android:id="@+id/item_detail"
-                    style="@style/ItemChip.Info"
-                    android:drawableStart="@drawable/ic_item_food"
-                    android:text="@string/sample_item_detail" />
-                <TextView
-                    android:id="@+id/item_tag"
-                    style="@style/ItemChip.Tag"
-                    android:drawableStart="@drawable/ic_item_leaf"
-                    android:text="@string/sample_item_tag" />
-            </com.google.android.material.chip.ChipGroup>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="7dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:id="@+id/item_rating"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:drawableStart="@drawable/ic_item_star"
-                    android:drawablePadding="4dp"
-                    android:gravity="center_vertical"
-                    android:text="@string/sample_item_rating"
-                    android:textSize="11sp"
-                    android:textColor="#526375" />
-                <View
-                    android:layout_width="1dp"
-                    android:layout_height="12dp"
-                    android:layout_marginHorizontal="8dp"
-                    android:background="#DDE5EA" />
-                <TextView
-                    android:id="@+id/item_location"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/sample_item_location"
-                    android:textSize="11sp"
-                    android:textColor="#526375" />
-            </LinearLayout>
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="8dp"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
-                <TextView
-                    android:id="@+id/item_price"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_marginEnd="8dp"
-                    android:text="@string/sample_item_price"
-                    android:textSize="19sp"
-                    android:textStyle="bold"
-                    android:textColor="#10182B" />
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/item_view_details"
-                    android:layout_width="wrap_content"
-                    android:layout_height="36dp"
-                    android:minWidth="0dp"
-                    android:background="@drawable/item_action_background"
-                    android:backgroundTint="@null"
-                    app:backgroundTint="@null"
-                    android:paddingHorizontal="10dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/item_view_details"
-                    android:textColor="#FFFFFF"
-                    android:textSize="11sp"
-                    android:textAllCaps="false"
-                    app:icon="@drawable/ic_user_chevron"
-                    app:iconTint="#FFFFFF"
-                    app:iconGravity="textEnd"
-                    app:iconPadding="4dp"
-                    app:iconSize="14dp" />
-            </LinearLayout>
-        </LinearLayout>
-    </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
-```
+- `app/src/main/res/drawable-nodpi/personal_seats_3.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_3_alt.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_5.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_5_alt.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_6.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_6_alt.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_8.jpg`
+- `app/src/main/res/drawable-nodpi/personal_seats_8_alt.jpg`
+- `app/src/main/res/drawable-nodpi/sample_item_photo.png`
+- `app/src/main/res/font/arial_rounded_mt_bold.ttf`
+- `app/src/main/res/mipmap-hdpi/ic_launcher.webp`
+- `app/src/main/res/mipmap-hdpi/ic_launcher_round.webp`
+- `app/src/main/res/mipmap-mdpi/ic_launcher.webp`
+- `app/src/main/res/mipmap-mdpi/ic_launcher_round.webp`
+- `app/src/main/res/mipmap-xhdpi/ic_launcher.webp`
+- `app/src/main/res/mipmap-xhdpi/ic_launcher_round.webp`
+- `app/src/main/res/mipmap-xxhdpi/ic_launcher.webp`
+- `app/src/main/res/mipmap-xxhdpi/ic_launcher_round.webp`
+- `app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp`
+- `app/src/main/res/mipmap-xxxhdpi/ic_launcher_round.webp`
 
-### `app/src/main/res/layout/sample_activity_card_list.xml`
+## Complete current XML resources
 
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<com.google.android.material.card.MaterialCardView
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="16dp"
-    android:layout_marginVertical="8dp"
-    app:cardCornerRadius="20dp"
-    app:cardElevation="0dp"
-    app:strokeWidth="1dp"
-    app:strokeColor="#EEF0F5"
-    app:cardBackgroundColor="#FFFFFF">
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="16dp"
-        android:background="@drawable/activity_card_background">
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="top">
-            <ImageView
-                android:id="@+id/activity_icon"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:padding="12dp"
-                android:background="@drawable/activity_icon_background"
-                android:src="@drawable/ic_user_email"
-                android:tint="#8A3FF0" />
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:orientation="vertical">
-                <TextView
-                    android:id="@+id/activity_title"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/sample_activity_title"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:textColor="#111B2D" />
-                <TextView
-                    android:id="@+id/activity_subtitle"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/sample_activity_subtitle"
-                    android:textSize="12sp"
-                    android:textColor="#8A99AD" />
-            </LinearLayout>
-            <ImageButton
-                android:id="@+id/activity_more"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
-                android:layout_marginStart="8dp"
-                android:padding="8dp"
-                android:background="@drawable/user_detail_background"
-                android:src="@drawable/ic_activity_more" />
-        </LinearLayout>
-        <com.google.android.material.chip.ChipGroup
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            app:chipSpacingHorizontal="8dp"
-            app:chipSpacingVertical="8dp">
-            <TextView
-                android:id="@+id/activity_type"
-                style="@style/purple_badge"
-                android:text="@string/sample_activity_type" />
-            <TextView
-                android:id="@+id/activity_date"
-                style="@style/UserDetail"
-                android:drawableStart="@drawable/ic_user_calendar"
-                android:text="@string/sample_activity_date" />
-            <TextView
-                android:id="@+id/activity_time"
-                style="@style/UserDetail"
-                android:drawableStart="@drawable/ic_activity_clock"
-                android:text="@string/sample_activity_time" />
-            <TextView
-                android:id="@+id/activity_mode"
-                style="@style/UserDetail"
-                android:drawableStart="@drawable/ic_activity_people"
-                android:text="@string/sample_activity_mode" />
-        </com.google.android.material.chip.ChipGroup>
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal"
-            android:gravity="center_vertical">
-            <TextView
-                android:id="@+id/activity_organizer_avatar"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:background="@drawable/user_avatar_background"
-                android:backgroundTint="#F0E8FF"
-                android:gravity="center"
-                android:text="@string/sample_activity_initials"
-                android:textStyle="bold"
-                android:textSize="12sp"
-                android:textColor="#7944AD" />
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="8dp"
-                android:layout_marginEnd="8dp"
-                android:orientation="vertical">
-                <TextView
-                    android:id="@+id/activity_organizer_name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/sample_activity_organizer"
-                    android:textSize="12sp"
-                    android:textStyle="bold"
-                    android:textColor="#17263B" />
-                <TextView
-                    android:id="@+id/activity_organizer_role"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp"
-                    android:text="@string/sample_activity_role"
-                    android:textSize="10sp"
-                    android:textColor="#8A99AD" />
-            </LinearLayout>
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/activity_secondary_action"
-                style="@style/Widget.Material3.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:minWidth="0dp"
-                android:paddingHorizontal="10dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/sample_activity_secondary"
-                android:textColor="#526375"
-                android:textSize="11sp"
-                android:textAllCaps="false"
-                app:cornerRadius="100dp"
-                app:strokeColor="#E7EBF1"
-                app:strokeWidth="1dp"
-                app:backgroundTint="#F7F9FB" />
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/activity_primary_action"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
-                android:minWidth="0dp"
-                android:paddingHorizontal="12dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:background="@drawable/activity_action_background"
-                android:backgroundTint="@null"
-                app:backgroundTint="@null"
-                android:text="@string/sample_activity_primary"
-                android:textColor="#FFFFFF"
-                android:textSize="11sp"
-                android:textStyle="bold"
-                android:textAllCaps="false"
-                app:icon="@drawable/ic_user_chevron"
-                app:iconTint="#FFFFFF"
-                app:iconSize="14dp"
-                app:iconGravity="textEnd"
-                app:iconPadding="6dp" />
-        </LinearLayout>
-    </LinearLayout>
-</com.google.android.material.card.MaterialCardView>
-```
+All paths below are relative to the project root. Each fenced block is the full file content at the time this guide was generated. The live XML files are authoritative if they change later. Keep resource names together when copying to a new project: a layout may require values, selectors, vectors, and shape drawables from multiple sections.
 
-### `app/src/main/res/layout/activity_admin_menu_list.xml`
+### res/layout (26 files)
+
+#### `app/src/main/res/layout/activity_admin_dashboard.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -1942,7 +235,682 @@ The screen XML is the AdminMenuListActivity example. Recreate a separately owned
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF"
+    android:background="@color/white"
+    tools:context=".admin.AdminDashboardActivity">
+    <LinearLayout
+        android:id="@+id/admin_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/dashboard_header_background"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="22dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="18dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    style="@style/AdminHeading"
+                    android:text="@string/admin_hello" />
+                <TextView
+                    style="@style/AdminHeading"
+                    android:text="@string/admin_name" />
+            </LinearLayout>
+
+            <FrameLayout
+                android:id="@+id/admin_notifications_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView
+                    android:id="@+id/admin_bell_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_dashboard_bell"
+                    android:tint="@color/dashboard_bell_tint" />
+                <View
+                    android:id="@+id/admin_notification_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/user_avatar_background"
+                    android:backgroundTint="@color/destructive" />
+            </FrameLayout>
+            <TextView
+                android:id="@+id/admin_avatar_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/admin_avatar_background"
+                android:clickable="true"
+                android:contentDescription="@string/admin_account_menu"
+                android:focusable="true"
+                android:fontFamily="@font/arial_rounded_mt_bold"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:text="@string/admin_initials"
+                android:textColor="@color/primary_dark" />
+        </LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/admin_subtitle"
+            android:textColor="@color/text_subheading"
+            android:textSize="@dimen/type_body" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/admin_scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="22dp"
+            android:paddingBottom="20dp">
+            <ViewFlipper
+                android:id="@+id/admin_feature"
+                android:layout_width="match_parent"
+                android:layout_height="166dp"
+                android:layout_marginTop="16dp"
+                android:autoStart="false"
+                android:flipInterval="3900"
+                android:inAnimation="@android:anim/fade_in"
+                android:outAnimation="@android:anim/fade_out">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/admin_feature_background"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+                    <TextView
+                        android:id="@+id/admin_feature_update_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="●  Update"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Feb 12th 2024"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_label" />
+                    <TextView
+                        android:id="@+id/admin_feature_update_message"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="Sales revenue increased 40% in 1 week"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_page_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="See Statistics  ›"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/admin_feature_background"
+                    android:backgroundTint="@color/primary_dark"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+                    <TextView
+                        android:id="@+id/admin_feature_items_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="●  Items"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Available now"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_label" />
+                    <TextView
+                        android:id="@+id/admin_feature_items_message"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        tools:text="3 items ready to browse"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_page_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="See Statistics  ›"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/admin_feature_background"
+                    android:backgroundTint="@color/badge_green"
+                    android:orientation="vertical"
+                    android:padding="20dp">
+                    <TextView
+                        android:id="@+id/admin_feature_activities_label"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="●  Activities"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="12dp"
+                        android:text="Latest activity"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_label" />
+                    <TextView
+                        android:id="@+id/admin_feature_activities_message"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_weight="1"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        tools:text="3 activities to review"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_page_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="See Statistics  ›"
+                        android:textColor="@color/primary_light"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+            </ViewFlipper>
+
+            <LinearLayout
+                android:id="@+id/admin_metrics"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal"
+                android:padding="8dp"
+                android:clipChildren="false"
+                android:clipToPadding="false">
+                <LinearLayout
+                    android:id="@+id/admin_items_metric"
+                    style="@style/AdminMetricFloatingCard"
+                    android:clickable="true"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        style="@style/AdminMetricLabel"
+                        android:text="@string/admin_items_metric_title" />
+                    <TextView
+                        android:id="@+id/admin_items_metric_value"
+                        style="@style/AdminMetricValue"
+                        android:text="3" />
+                    <TextView
+                        style="@style/AdminMetricChange"
+                        android:text="@string/admin_items_metric_action"
+                        android:textColor="@color/primary_dark" />
+                </LinearLayout>
+                <LinearLayout
+                    android:id="@+id/admin_persons_metric"
+                    style="@style/AdminMetricCard"
+                    android:layout_marginStart="12dp"
+                    android:clickable="true"
+                    android:foreground="?attr/selectableItemBackground">
+                    <TextView
+                        style="@style/AdminMetricLabel"
+                        android:text="@string/admin_persons_metric_title" />
+                    <TextView
+                        android:id="@+id/admin_persons_metric_value"
+                        style="@style/AdminMetricValue"
+                        android:text="3" />
+                    <TextView
+                        style="@style/AdminMetricChange"
+                        android:text="@string/admin_persons_metric_action"
+                        android:textColor="@color/primary_dark" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="18dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:background="@drawable/admin_outline_background">
+                <EditText
+                    android:id="@+id/admin_search"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="4dp"
+                    android:background="@android:color/transparent"
+                    android:hint="@string/admin_search_hint"
+                    android:singleLine="true"
+                    android:inputType="text"
+                    android:textColor="@color/search_text"
+                    android:textColorHint="@color/search_hint"
+                    android:textSize="@dimen/type_body" />
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="match_parent"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_list_search"
+                    android:tint="@color/text_heading" />
+            </LinearLayout>
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/admin_statuses"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:singleLine="false"
+                app:singleSelection="true"
+                app:selectionRequired="false"
+                app:chipSpacingHorizontal="8dp"
+                app:chipSpacingVertical="8dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/admin_sample_items"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_section_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/admin_sample_items_subheading"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/admin_transaction_count1"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/menu_search_background"
+                    android:gravity="center"
+                    android:minWidth="42dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/admin_zero_items"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/admin_transactions_list1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="visible" />
+            <include
+                android:id="@+id/admin_items_empty"
+                android:visibility="gone"
+                layout="@layout/view_empty_list" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/admin_sample_activities"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_section_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/admin_sample_activities_subheading"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/admin_transaction_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/menu_search_background"
+                    android:gravity="center"
+                    android:minWidth="42dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/admin_zero_items"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/admin_outline_background"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/admin_activities_search"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:hint="@string/admin_activities_search_hint"
+                    android:inputType="text"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="4dp"
+                    android:singleLine="true"
+                    android:textColor="@color/search_text"
+                    android:textColorHint="@color/search_hint"
+                    android:textSize="@dimen/type_body" />
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="match_parent"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_list_search"
+                    android:tint="@color/text_heading" />
+            </LinearLayout>
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/admin_activity_filters"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:chipSpacingHorizontal="8dp"
+                app:chipSpacingVertical="8dp"
+                app:selectionRequired="true"
+                app:singleLine="false"
+                app:singleSelection="true" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/admin_transactions_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:nestedScrollingEnabled="false"
+                android:visibility="visible" />
+            <include
+                android:id="@+id/admin_activities_empty"
+                android:visibility="gone"
+                layout="@layout/view_empty_list" />
+        </LinearLayout>
+    </ScrollView>
+
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_admin_item_show.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical">
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="320dp">
+                <ImageView
+                    android:id="@+id/item_show_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:scaleType="centerCrop"
+                    android:src="@drawable/sample_item_photo" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="top"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="20dp"
+                    android:paddingTop="20dp">
+                    <androidx.appcompat.widget.AppCompatImageButton
+                        android:id="@+id/item_show_back"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/item_show_icon_background"
+                        android:contentDescription="@string/item_show_close"
+                        android:padding="12dp"
+                        android:src="@drawable/ic_list_back"
+                        app:tint="@color/text_heading" />
+                    <View
+                        android:layout_width="0dp"
+                        android:layout_height="1dp"
+                        android:layout_weight="1" />
+                    <androidx.appcompat.widget.AppCompatImageButton
+                        android:id="@+id/item_show_favorite"
+                        android:layout_width="44dp"
+                        android:layout_height="44dp"
+                        android:background="@drawable/item_show_icon_background"
+                        android:contentDescription="@string/item_show_favorite"
+                        android:padding="12dp"
+                        android:src="@drawable/ic_item_heart"
+                        app:tint="@color/destructive" />
+                </LinearLayout>
+            </FrameLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="292dp"
+                android:background="@drawable/item_show_sheet_background"
+                android:orientation="vertical"
+                android:paddingHorizontal="24dp"
+                android:paddingTop="30dp"
+                android:paddingBottom="28dp">
+                <TextView
+                    android:id="@+id/item_show_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:text="@string/sample_item_name"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_large_heading" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:id="@+id/item_show_rating"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:drawableStart="@drawable/ic_item_star"
+                        android:drawablePadding="5dp"
+                        android:text="@string/sample_item_rating"
+                        android:textColor="@color/text_body"
+                        android:textSize="@dimen/type_subheading" />
+                    <TextView
+                        android:id="@+id/item_show_location"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="16dp"
+                        android:layout_weight="1"
+                        android:drawableStart="@drawable/ic_user_location"
+                        android:drawablePadding="5dp"
+                        android:singleLine="true"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:background="@drawable/person_facts_background"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="10dp"
+                    android:paddingVertical="12dp">
+                    <LinearLayout
+                        style="@style/PersonFactColumn">
+                        <TextView
+                            style="@style/PersonFactLabel"
+                            android:text="@string/item_show_category_label" />
+                        <TextView
+                            android:id="@+id/item_show_category"
+                            style="@style/PersonFactValue"
+                            android:text="@string/sample_item_category" />
+                    </LinearLayout>
+                    <LinearLayout
+                        style="@style/PersonFactColumn">
+                        <TextView
+                            style="@style/PersonFactLabel"
+                            android:text="@string/item_show_detail_label" />
+                        <TextView
+                            android:id="@+id/item_show_detail"
+                            style="@style/PersonFactValue"
+                            android:text="@string/sample_item_detail" />
+                    </LinearLayout>
+                    <LinearLayout
+                        style="@style/PersonFactColumn">
+                        <TextView
+                            style="@style/PersonFactLabel"
+                            android:text="@string/item_show_tag_label" />
+                        <TextView
+                            android:id="@+id/item_show_tag"
+                            style="@style/PersonFactValue" />
+                    </LinearLayout>
+                    <LinearLayout
+                        style="@style/PersonFactColumn">
+                        <TextView
+                            style="@style/PersonFactLabel"
+                            android:text="@string/item_show_status_label" />
+                        <TextView
+                            android:id="@+id/item_show_status"
+                            style="@style/PersonFactValue" />
+                    </LinearLayout>
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/item_show_about_heading"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="30dp"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:text="@string/item_show_about"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_card_heading" />
+                <TextView
+                    android:id="@+id/item_show_description"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:lineSpacingExtra="3dp"
+                    android:text="@string/item_show_sample_description"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_body" />
+            </LinearLayout>
+        </FrameLayout>
+    </ScrollView>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/white"
+        android:elevation="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="20dp"
+        android:paddingVertical="14dp">
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/item_show_from"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_caption" />
+            <TextView
+                android:id="@+id/item_show_price"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="3dp"
+                android:fontFamily="@font/arial_rounded_mt_bold"
+                android:text="@string/sample_item_price"
+                android:textColor="@color/primary_dark"
+                android:textSize="@dimen/type_card_heading" />
+        </LinearLayout>
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/item_show_share"
+            android:layout_width="154dp"
+            android:layout_height="52dp"
+            android:background="@drawable/item_action_background"
+            android:text="@string/item_show_share"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="@dimen/type_button" />
+    </LinearLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_admin_menu_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/white"
     android:paddingHorizontal="16dp">
     <LinearLayout
         android:layout_width="match_parent"
@@ -1962,1232 +930,233 @@ The screen XML is the AdminMenuListActivity example. Recreate a separately owned
             android:layout_weight="1"
             android:gravity="center"
             android:text="@string/menu_title"
-            android:textSize="22sp"
+            android:textSize="@dimen/type_page_heading"
             android:textStyle="bold"
-            android:textColor="#101A23" />
-        <com.google.android.material.button.MaterialButton
+            android:textColor="@color/text_heading" />
+        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/menu_add"
             android:layout_width="wrap_content"
             android:layout_height="44dp"
+            android:background="@drawable/item_action_background"
+            android:drawableStart="@drawable/ic_list_plus"
+            android:drawablePadding="6dp"
+            android:drawableTint="@color/white"
             android:minWidth="0dp"
-            android:paddingHorizontal="14dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
+            android:paddingHorizontal="12dp"
             android:text="@string/menu_add"
-            android:textSize="12sp"
-            android:textColor="#FFFFFF"
-            android:textAllCaps="false"
-            app:icon="@drawable/ic_list_plus"
-            app:iconSize="18dp"
-            app:iconTint="#FFFFFF"
-            app:backgroundTint="#08783F"
-            app:cornerRadius="100dp" />
+            android:textSize="@dimen/type_label"
+            android:textColor="@color/white"
+            android:textAllCaps="false" />
     </LinearLayout>
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="52dp"
-        android:layout_marginTop="12dp"
-        android:orientation="horizontal">
+        android:layout_height="48dp"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/admin_outline_background">
         <EditText
             android:id="@+id/menu_search"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:background="@drawable/menu_search_background"
-            android:paddingHorizontal="18dp"
-            android:drawableStart="@drawable/ic_list_search"
-            android:drawablePadding="12dp"
+            android:paddingStart="18dp"
+            android:paddingEnd="4dp"
+            android:background="@android:color/transparent"
             android:hint="@string/menu_search"
-            android:textSize="14sp"
-            android:textColor="#14231D"
-            android:textColorHint="#8B929E"
+            android:singleLine="true"
             android:inputType="text"
-            android:singleLine="true" />
-        <ImageButton
-            android:id="@+id/menu_sort"
-            android:layout_width="52dp"
-            android:layout_height="52dp"
-            android:layout_marginStart="10dp"
-            android:padding="14dp"
-            android:background="@drawable/menu_filter_background"
-            android:src="@drawable/ic_list_filter"
-            android:tint="#08783F" />
+            android:textColor="@color/search_text"
+            android:textColorHint="@color/search_hint"
+            android:textSize="@dimen/type_body" />
+        <ImageView
+            android:layout_width="42dp"
+            android:layout_height="match_parent"
+            android:padding="12dp"
+            android:src="@drawable/ic_list_search"
+            android:tint="@color/text_heading" />
     </LinearLayout>
     <com.google.android.material.chip.ChipGroup
         android:id="@+id/menu_categories"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
+        android:layout_marginTop="12dp"
         android:layout_marginBottom="8dp"
+        app:singleLine="false"
         app:singleSelection="true"
         app:selectionRequired="true"
-        app:chipSpacingHorizontal="6dp"
-        app:chipSpacingVertical="2dp">
+        app:chipSpacingHorizontal="8dp"
+        app:chipSpacingVertical="8dp">
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_all"
-            style="@style/MenuFilterChip"
+            style="@style/AdminStatusChip"
             android:text="@string/menu_all"
-            app:chipIcon="@drawable/ic_list_grid"
             android:checked="true" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_food"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_food"
-            app:chipIcon="@drawable/ic_item_food" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_food" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_drinks"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_drinks"
-            app:chipIcon="@drawable/ic_list_drink" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_drinks" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_desserts"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_desserts"
-            app:chipIcon="@drawable/ic_item_leaf" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_desserts" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_breakfast"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_breakfast"
-            app:chipIcon="@drawable/ic_list_sun" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_breakfast" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_lunch"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_lunch"
-            app:chipIcon="@drawable/ic_list_lunch" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_lunch" />
         <com.google.android.material.chip.Chip
             android:id="@+id/filter_dinner"
-            style="@style/MenuFilterChip"
-            android:text="@string/menu_dinner"
-            app:chipIcon="@drawable/ic_list_moon" />
+            style="@style/AdminStatusChip"
+            android:text="@string/menu_dinner" />
     </com.google.android.material.chip.ChipGroup>
-    <TextView
-        android:id="@+id/menu_empty"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:padding="24dp"
-        android:gravity="center"
-        android:text="@string/menu_empty"
-        android:textColor="#8B929E"
-        android:visibility="gone" />
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/menu_list"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:clipToPadding="false"
-        android:paddingBottom="16dp"
-        tools:listitem="@layout/sample_item_card_list"
-        tools:itemCount="3"
-        app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
-        app:spanCount="2" />
+        android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/menu_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp"
+            tools:listitem="@layout/sample_item_card_list"
+            tools:itemCount="3"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2" />
+        <include
+            android:id="@+id/menu_empty"
+            layout="@layout/view_empty_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>
 ```
 
-### `app/src/main/res/drawable/ic_user_chevron.xml`
+#### `app/src/main/res/layout/activity_admin_person_list.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<vector
+<LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M9,5 L16,12 L9,19" />
-</vector>
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    tools:context=".admin.AdminPersonListActivity">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <ImageView
+            android:id="@+id/person_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/person_list_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_page_heading"
+            android:textStyle="bold" />
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/person_add"
+            android:layout_width="wrap_content"
+            android:layout_height="44dp"
+            android:background="@drawable/item_action_background"
+            android:drawableStart="@drawable/ic_list_plus"
+            android:drawablePadding="6dp"
+            android:drawableTint="@color/white"
+            android:minWidth="0dp"
+            android:paddingHorizontal="12dp"
+            android:text="@string/person_add"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="@dimen/type_label" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="18dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:background="@drawable/admin_outline_background">
+        <EditText
+            android:id="@+id/person_search"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:paddingStart="18dp"
+            android:paddingEnd="4dp"
+            android:background="@android:color/transparent"
+            android:hint="@string/person_search"
+            android:singleLine="true"
+            android:inputType="text"
+            android:textColor="@color/search_text"
+            android:textColorHint="@color/search_hint"
+            android:textSize="@dimen/type_body" />
+        <ImageView
+            android:layout_width="42dp"
+            android:layout_height="match_parent"
+            android:padding="12dp"
+            android:src="@drawable/ic_list_search"
+            android:tint="@color/text_heading" />
+    </LinearLayout>
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/person_filters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        app:chipSpacingHorizontal="8dp"
+        app:chipSpacingVertical="8dp"
+        app:selectionRequired="true"
+        app:singleLine="false"
+        app:singleSelection="true" />
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/person_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:itemCount="3"
+            tools:listitem="@layout/sample_person_list" />
+        <include
+            android:id="@+id/person_empty"
+            layout="@layout/view_empty_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>
 ```
 
-### `app/src/main/res/drawable/item_action_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ripple
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#40FFFFFF">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="315"
-                android:startColor="#25CE99"
-                android:endColor="#00A77B" />
-        </shape>
-    </item>
-</ripple>
-```
-
-### `app/src/main/res/drawable/ic_item_star.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="14dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#FFBA24"
-        android:strokeColor="#FFBA24"
-        android:strokeWidth="0"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,1 L15.4,8.1 L23,9.2 L17.5,14.6 L18.8,22.2 L12,18.6 L5.2,22.2 L6.5,14.6 L1,9.2 L8.6,8.1 Z" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_item_leaf.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="14dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#10B981"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M4,19 C0,8 8,3 21,3 C21,16 15,23 4,19 Z M2,23 L21,3" />
-</vector>
-```
-
-### `app/src/main/res/drawable/user_detail_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid
-        android:color="#EFF4F6" />
-    <corners
-        android:radius="100dp" />
-</shape>
-```
-
-### `app/src/main/res/drawable/ic_item_food.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="14dp"
-    android:height="14dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#FF8A17"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M3,2 V8 Q3,11 7,11 Q11,11 11,8 V2 M7,2 V22 M16,22 V13 C13,12 14,2 18,2 C22,2 23,12 20,13 H16" />
-</vector>
-```
-
-### `app/src/main/res/drawable/item_info_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid
-        android:color="#FFF5EB" />
-    <corners
-        android:radius="100dp" />
-</shape>
-```
-
-### `app/src/main/res/drawable/green_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#F1FCF8"
-                android:endColor="#E6FAF2" />
-            <stroke
-                android:width="1dp"
-                android:color="#D7F6EC" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#10BE8B" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/ic_item_heart.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="22dp"
-    android:height="22dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#121B2A"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,21 C8,17 2,13 2,8 C2,2 9,1 12,6 C15,1 22,2 22,8 C22,13 16,17 12,21 Z" />
-</vector>
-```
-
-### `app/src/main/res/drawable/user_avatar_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <solid
-        android:color="#E3F8F0" />
-    <corners
-        android:radius="100dp" />
-</shape>
-```
-
-### `app/src/main/res/drawable/sample_item_photo.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="180dp"
-    android:height="112dp"
-    android:viewportWidth="180"
-    android:viewportHeight="112">
-    <path
-        android:fillColor="#E6F7EE"
-        android:pathData="M0,0H180V112H0Z" />
-    <path
-        android:fillColor="#8ECDB0"
-        android:pathData="M10,102L60,42L98,84L124,56L170,102Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M126,14a12,12 0,1 0,0,24a12,12 0,1 0,0,-24" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_moon.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M20,15a9,9 0,0 1,-11,-12a9,9 0,1 0,11,12" />
-</vector>
-```
-
-### `app/src/main/res/color/menu_chip_text.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<selector
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:state_checked="true"
-        android:color="#08783F" />
-    <item
-        android:color="#18232F" />
-</selector>
-```
-
-### `app/src/main/res/color/menu_chip_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<selector
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:state_checked="true"
-        android:color="#E6F7EE" />
-    <item
-        android:color="#F5F6F8" />
-</selector>
-```
-
-### `app/src/main/res/drawable/ic_list_lunch.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M3,18H21 M5,16a7,7 0,0 1,14,0Z M12,7V4 M10,4H14 M2,21H22" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_sun.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,6a6,6 0,1 0,0,12a6,6 0,1 0,0,-12 M12,1V3 M12,21V23 M1,12H3 M21,12H23 M4,4L5.5,5.5 M18.5,18.5L20,20 M4,20L5.5,18.5 M18.5,5.5L20,4" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_drink.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M6,8H18L16,21H8Z M12,8L14,2H19 M6,12H18" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_grid.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M3,3H9V9H3Z M15,3H21V9H15Z M3,15H9V21H3Z M15,15H21V21H15Z" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_filter.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M4,6H8 M12,6H20 M4,12H14 M18,12H20 M4,18H6 M10,18H20 M8,6a2,2 0,1 0,4,0a2,2 0,1 0,-4,0 M14,12a2,2 0,1 0,4,0a2,2 0,1 0,-4,0 M6,18a2,2 0,1 0,4,0a2,2 0,1 0,-4,0" />
-</vector>
-```
-
-### `app/src/main/res/drawable/menu_filter_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="oval">
-    <solid
-        android:color="#FFFFFF" />
-    <stroke
-        android:width="1dp"
-        android:color="#EEF0F3" />
-</shape>
-```
-
-### `app/src/main/res/drawable/ic_list_search.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M10.5,3.5a7,7 0,1 0,0,14a7,7 0,1 0,0,-14 M16,16L21,21" />
-</vector>
-```
-
-### `app/src/main/res/drawable/menu_search_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="100dp" />
-    <solid
-        android:color="#F5F6F8" />
-</shape>
-```
-
-### `app/src/main/res/drawable/ic_list_plus.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,4V20 M4,12H20" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_list_back.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#14231D"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M19,12H5 M12,5L5,12L12,19" />
-</vector>
-```
-
-### `app/src/main/res/drawable/activity_action_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<ripple
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:color="#40FFFFFF">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#9A58FF"
-                android:endColor="#7225EC" />
-        </shape>
-    </item>
-</ripple>
-```
-
-### `app/src/main/res/drawable/ic_activity_people.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M9,3 A4,4 0,1 1,9 11 A4,4 0,1 1,9 3 M2,21 V18 C2,12 16,12 16,18 V21 M17,3 C22,3 22,11 17,11 M19,14 C23,15 23,19 23,21" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_activity_clock.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,2 A10,10 0,1 1,12 22 A10,10 0,1 1,12 2 M12,6 V12 L16,14" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_calendar.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M5,5 H19 Q21,5 21,7 V20 Q21,22 19,22 H5 Q3,22 3,20 V7 Q3,5 5,5 Z M3,10 H21 M8,2 V7 M16,2 V7" />
-</vector>
-```
-
-### `app/src/main/res/drawable/purple_badge.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<layer-list
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:paddingMode="stack">
-    <item>
-        <shape>
-            <corners
-                android:radius="100dp" />
-            <gradient
-                android:angle="270"
-                android:startColor="#F8F2FF"
-                android:endColor="#EEDFFF" />
-            <stroke
-                android:width="1dp"
-                android:color="#E8D9FC" />
-            <padding
-                android:left="28dp"
-                android:right="12dp"
-                android:top="6dp"
-                android:bottom="6dp" />
-        </shape>
-    </item>
-    <item
-        android:width="8dp"
-        android:height="8dp"
-        android:left="12dp"
-        android:gravity="left|center_vertical">
-        <shape
-            android:shape="oval">
-            <solid
-                android:color="#9A62DE" />
-        </shape>
-    </item>
-</layer-list>
-```
-
-### `app/src/main/res/drawable/ic_activity_more.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="#526572"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,3 A1,1 0,1 1,12 5 A1,1 0,1 1,12 3 M12,11 A1,1 0,1 1,12 13 A1,1 0,1 1,12 11 M12,19 A1,1 0,1 1,12 21 A1,1 0,1 1,12 19" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_email.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M3,5 H21 V19 H3 Z M3,5 L12,12 L21,5" />
-</vector>
-```
-
-### `app/src/main/res/drawable/activity_icon_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="14dp" />
-    <gradient
-        android:angle="270"
-        android:startColor="#F5EFFF"
-        android:endColor="#EEE3FC" />
-</shape>
-```
-
-### `app/src/main/res/drawable/activity_card_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="20dp" />
-    <gradient
-        android:angle="225"
-        android:startColor="#FBF8FF"
-        android:centerColor="#FFFFFF"
-        android:endColor="#FFFFFF" />
-</shape>
-```
-
-### `app/src/main/res/drawable/ic_user_certificate.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M2,8 L12,3 L22,8 L12,13 Z M6,10 V17 C9,20 15,20 18,17 V10 M22,8 V17" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_id.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M3,4 H21 V20 H3 Z M8,8 A2,2 0,1 1,8 12 A2,2 0,1 1,8 8 M5,17 C5,13 11,13 11,17 Z M14,8 H18 M14,12 H18 M14,16 H18" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_location.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M12,22 C9,18 4,13 4,9 A8,8 0,1 1,20 9 C20,13 15,18 12,22 Z M12,6 A3,3 0,1 1,12 12 A3,3 0,1 1,12 6" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_credits.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M20,6 C20,9 4,9 4,6 C4,3 20,3 20,6 Z M4,6 V11 C4,14 20,14 20,11 V6 M4,11 V16 C4,19 20,19 20,16 V11 M4,16 V20 C4,23 20,23 20,20 V16" />
-</vector>
-```
-
-### `app/src/main/res/drawable/ic_user_phone.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="18dp"
-    android:height="18dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#526572"
-        android:strokeWidth="1.8"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M6,3 L3,5 C3,13 11,21 19,21 L21,18 L16,14 L13,17 C10,15 8,13 7,10 L10,7 Z" />
-</vector>
-```
-
-### `app/src/main/res/drawable/modal_card.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="24dp" />
-    <gradient
-        android:angle="225"
-        android:startColor="@color/success_pale"
-        android:centerColor="#F7FCFA"
-        android:endColor="#FFFFFF" />
-</shape>
-```
-
-### `app/src/main/res/values/list_template_resources.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color
-        name="badge_green_text">#12805C</color>
-    <color
-        name="badge_purple_text">#7944AD</color>
-    <color
-        name="success_pale">#E3F8F0</color>
-    <string
-        name="item_available">Available</string>
-    <string
-        name="item_view_details">View Details</string>
-    <string
-        name="menu_add">Add Item</string>
-    <string
-        name="menu_all">All  3</string>
-    <string
-        name="menu_breakfast">Breakfast  1</string>
-    <string
-        name="menu_desserts">Desserts  0</string>
-    <string
-        name="menu_dinner">Dinner  1</string>
-    <string
-        name="menu_drinks">Drinks  0</string>
-    <string
-        name="menu_empty">No matching menu items</string>
-    <string
-        name="menu_food">Food  3</string>
-    <string
-        name="menu_lunch">Lunch  1</string>
-    <string
-        name="menu_search">Search menu items…</string>
-    <string
-        name="menu_title">Menu Items</string>
-    <string
-        name="sample_activity_date">Feb 5, 2024</string>
-    <string
-        name="sample_activity_initials">AR</string>
-    <string
-        name="sample_activity_mode">Online</string>
-    <string
-        name="sample_activity_organizer">Alex Rivera</string>
-    <string
-        name="sample_activity_primary">Accept</string>
-    <string
-        name="sample_activity_role">Organizer</string>
-    <string
-        name="sample_activity_secondary">Decline</string>
-    <string
-        name="sample_activity_subtitle">by Alex Rivera</string>
-    <string
-        name="sample_activity_time">6:00 PM – 7:00 PM</string>
-    <string
-        name="sample_activity_title">You’re invited to Web Development Class</string>
-    <string
-        name="sample_activity_type">Invitation</string>
-    <string
-        name="sample_item_category">Fast Food</string>
-    <string
-        name="sample_item_detail">320 calories</string>
-    <string
-        name="sample_item_location">Manila, PH</string>
-    <string
-        name="sample_item_name">Cheeseburger</string>
-    <string
-        name="sample_item_price">₱120</string>
-    <string
-        name="sample_item_rating">4.8 (120)</string>
-    <string
-        name="sample_item_tag">Beef</string>
-    <string
-        name="sample_user_age">29 years old</string>
-    <string
-        name="sample_user_credits">250 credits</string>
-    <string
-        name="sample_user_email">jamie.reyes@example.com</string>
-    <string
-        name="sample_user_id">ID: USR-00421</string>
-    <string
-        name="sample_user_initials">AM</string>
-    <string
-        name="sample_user_joined">Joined Jan 12, 2024</string>
-    <string
-        name="sample_user_location">Manila, PH</string>
-    <string
-        name="sample_user_name">Alex Morgan</string>
-    <string
-        name="sample_user_phone">0917 000 0001</string>
-    <string
-        name="sample_user_role">Member</string>
-    <string
-        name="sample_user_specialty">Certified Level 2</string>
-    <string
-        name="user_active">Active</string>
-    <style
-        name="ItemChip"
-        parent="">
-        <item
-            name="android:layout_width">wrap_content</item>
-        <item
-            name="android:layout_height">wrap_content</item>
-        <item
-            name="android:paddingHorizontal">6dp</item>
-        <item
-            name="android:paddingVertical">5dp</item>
-        <item
-            name="android:drawablePadding">4dp</item>
-        <item
-            name="android:gravity">center_vertical</item>
-        <item
-            name="android:textSize">10sp</item>
-        <item
-            name="android:includeFontPadding">false</item>
-    </style>
-    <style
-        name="ItemChip.Info"
-        parent="ItemChip">
-        <item
-            name="android:background">@drawable/item_info_background</item>
-        <item
-            name="android:textColor">#263449</item>
-    </style>
-    <style
-        name="ItemChip.Tag"
-        parent="ItemChip">
-        <item
-            name="android:background">@drawable/user_detail_background</item>
-        <item
-            name="android:backgroundTint">#E9FAF3</item>
-        <item
-            name="android:textColor">#138764</item>
-    </style>
-    <style
-        name="ItemPhotoShape"
-        parent="">
-        <item
-            name="cornerSize">12dp</item>
-    </style>
-    <style
-        name="MenuFilterChip"
-        parent="Widget.Material3.Chip.Filter">
-        <item
-            name="android:layout_width">wrap_content</item>
-        <item
-            name="android:layout_height">wrap_content</item>
-        <item
-            name="android:textSize">12sp</item>
-        <item
-            name="android:textColor">@color/menu_chip_text</item>
-        <item
-            name="android:checkable">true</item>
-        <item
-            name="chipBackgroundColor">@color/menu_chip_background</item>
-        <item
-            name="chipStrokeWidth">0dp</item>
-        <item
-            name="chipCornerRadius">100dp</item>
-        <item
-            name="chipMinHeight">40dp</item>
-        <item
-            name="chipIconSize">20dp</item>
-        <item
-            name="chipIconTint">@color/menu_chip_text</item>
-        <item
-            name="checkedIconVisible">false</item>
-        <item
-            name="chipIconVisible">true</item>
-        <item
-            name="ensureMinTouchTargetSize">false</item>
-    </style>
-    <style
-        name="StatusBadge"
-        parent="">
-        <item
-            name="android:layout_width">wrap_content</item>
-        <item
-            name="android:layout_height">wrap_content</item>
-        <item
-            name="android:minHeight">28dp</item>
-        <item
-            name="android:gravity">center_vertical</item>
-        <item
-            name="android:includeFontPadding">false</item>
-        <item
-            name="android:textSize">12sp</item>
-        <item
-            name="android:textStyle">bold</item>
-    </style>
-    <style
-        name="UserAvatarShape"
-        parent="">
-        <item
-            name="cornerSize">50%</item>
-    </style>
-    <style
-        name="UserDetail"
-        parent="">
-        <item
-            name="android:layout_width">wrap_content</item>
-        <item
-            name="android:layout_height">wrap_content</item>
-        <item
-            name="android:background">@drawable/user_detail_background</item>
-        <item
-            name="android:paddingHorizontal">10dp</item>
-        <item
-            name="android:paddingVertical">7dp</item>
-        <item
-            name="android:drawablePadding">7dp</item>
-        <item
-            name="android:gravity">center_vertical</item>
-        <item
-            name="android:textColor">#344553</item>
-        <item
-            name="android:drawableTint">#526572</item>
-        <item
-            name="android:textSize">11sp</item>
-        <item
-            name="android:includeFontPadding">false</item>
-    </style>
-    <style
-        name="UserDetail.Green"
-        parent="UserDetail">
-        <item
-            name="android:backgroundTint">#E3F8F0</item>
-        <item
-            name="android:textColor">#08784F</item>
-        <item
-            name="android:drawableTint">#08784F</item>
-    </style>
-    <style
-        name="green_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/green_badge</item>
-        <item
-            name="android:textColor">@color/badge_green_text</item>
-    </style>
-    <style
-        name="purple_badge"
-        parent="StatusBadge">
-        <item
-            name="android:background">@drawable/purple_badge</item>
-        <item
-            name="android:textColor">@color/badge_purple_text</item>
-    </style>
-</resources>
-```
-
-## 20. Generic dashboard template and complete implementation
-
-Use this approved emerald/mint dashboard design for dashboard screens unless the user requests a different design. `DashboardSampleActivity` and `activity_dashboard_sample.xml` are the generic visual reference. Actual application dashboards remain separate per role, such as `AdminDashboardActivity`, `CustomerDashboardActivity`, and `InstructorDashboardActivity`, with separately owned layouts and behavior. Do not route all roles to the sample Activity or use it as a shared dashboard implementation.
-
-Keep sample copy generic: Sample App, Dashboard Overview, SU, Welcome back!, Here’s an overview of your activity., and Users / Items / Requests / Completed. Do not put GymBuddy, gym, members, trainers, classes, enrollments, or another domain-specific brand into the generic template. For a real requested app, adapt the brand, identity and metrics to that app and role. Sample totals and growth percentages are visual placeholders, not database statistics; bind actual counts/calculated trends when that functionality is requested. Do not create tables or a backend just to reproduce this dashboard.
-
-### Required visual structure
-
-- White background, system sans-serif, 20dp horizontal padding, system-bar insets respected.
-- A 52dp header with 16dp top margin: 44dp emerald rounded-square grid/logo icon, bold 20sp app name and gray 13sp dashboard subtitle, a 40dp notification button, and a 40dp mint circular initials avatar separated by 10dp. When the notification list has items, the bell button uses a pale mint background, green icon, and visible small red dot. When the list is empty, use a plain pale-gray background, gray icon, and hide the dot. Derive both states from the same notification list displayed in the bottom sheet; never leave the red dot visible for an empty list.
-- Greeting 20dp below the header: bold 26sp #101A23. Description below it with 5dp margin, 13sp #8191A1.
-- Four summary cards arranged in two equal-width columns and two rows, starting 20dp below the description. Cards are 152dp high, with 12dp column and row gaps, 18dp corners, no elevation, a 1dp #DDF5EA outline, and 14dp internal padding. When a summary represents a list the user needs to open, use THAT summary card as the navigation target: Users opens the role-specific user/student list, Items opens the role-specific menu/item list, and so on. Use a normal Intent, keep the destination role-specific, and make only cards with real destinations clickable. Do not add a separate menu of duplicate navigation buttons.
-- Card background is #F7FDFB with subtle mint waves (#E9FAF2 and #DFF6EB) at the bottom. Draw the waves with the included native vector, never a downloaded image. Top row has a 40dp mint circular local icon panel and a small pale green trend pill on the right. Trend text is bold 12sp #08783F. The number is bold 28sp #101A23, with 12dp top spacing; label is 14sp #8191A1.
-- Important List header is 24dp below the second card row. It has a 44dp mint icon panel on the left, bold 18sp title with gray 12sp subtitle, and a gray rounded count badge at the FAR RIGHT edge. Keep the text column weighted; the badge must never sit immediately beside the title. Badge minimum width is 32dp, with 10dp horizontal and 6dp vertical padding, bold 13sp #8191A1 text and #F5F6F8 background.
-- Place a RecyclerView directly below the Important List header, with 12dp top margin, vertical LinearLayoutManager, remaining-height weight 1, and 16dp bottom padding. Do not hardcode repeated activity rows into the dashboard XML or wrap the RecyclerView in a ScrollView.
-- For this sample, leave the RecyclerView EMPTY with no adapter, sample records or tools:listitem entries. Count is 0 because there are no displayed records. When a real activity feed is requested, bind appropriate ActivityCard rows and update the count from that same collection. Do not fabricate a nonzero count for an empty feed.
-- Reuse shared XML drawables and installed offline-compatible AndroidX/Material components. Keep Java short, source comment-free, and every XML attribute on its own line. Do not add abstraction layers or extra dashboard helpers.
-
-### Complete sample files
-
-These files reproduce the dashboard without the original project or generated design image. Section 23 adds the approved notification bottom sheet, RecyclerView row and bell state resources. Replace `com.example.app` with the destination package. Shared resources `user_avatar_background.xml`, `user_detail_background.xml`, `menu_search_background.xml`, `ic_list_grid.xml`, `ic_activity_people.xml`, `ic_user_calendar.xml`, and `ic_user_id.xml` are already fully embedded in section 19; recreate those exact blocks if missing. Merge string/style entries by name and do not duplicate shared resources. The new dashboard-specific files are below.
-
-### `app/src/main/java/com/example/app/DashboardSampleActivity.java`
-
-```java
-package com.example.app;
-
-import android.os.Bundle;
-import android.view.View;
-import androidx.activity.EdgeToEdge;
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.graphics.Insets;
-import androidx.core.view.ViewCompat;
-import androidx.core.view.WindowInsetsCompat;
-import androidx.recyclerview.widget.LinearLayoutManager;
-import androidx.recyclerview.widget.RecyclerView;
-import com.example.app.adapters.NotificationAdapter;
-import com.example.app.models.NotificationItem;
-import java.util.ArrayList;
-import com.google.android.material.bottomsheet.BottomSheetDialog;
-
-public class DashboardSampleActivity extends AppCompatActivity {
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        EdgeToEdge.enable(this);
-        setContentView(R.layout.activity_dashboard_sample);
-        ArrayList<NotificationItem> notifications = sampleNotifications();
-        boolean hasNotifications = !notifications.isEmpty();
-        findViewById(R.id.dashboard_bell_icon).setSelected(hasNotifications);
-        findViewById(R.id.dashboard_notification_dot).setVisibility(
-                hasNotifications ? View.VISIBLE : View.GONE);
-        findViewById(R.id.dashboard_notifications_button).setOnClickListener(v -> {
-            BottomSheetDialog sheet = new BottomSheetDialog(this);
-            sheet.setContentView(R.layout.bottom_sheet_notifications);
-            RecyclerView list = sheet.findViewById(R.id.notifications_list);
-            list.setLayoutManager(new LinearLayoutManager(this));
-            list.setAdapter(new NotificationAdapter(this, notifications));
-            sheet.findViewById(R.id.notifications_close).setOnClickListener(close -> sheet.dismiss());
-            sheet.show();
-        });
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (view, insets) -> {
-            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            int padding = Math.round(20 * getResources().getDisplayMetrics().density);
-            view.setPadding(bars.left + padding, bars.top, bars.right + padding, bars.bottom);
-            return insets;
-        });
-    }
-    private ArrayList<NotificationItem> sampleNotifications() {
-        ArrayList<NotificationItem> notifications = new ArrayList<>();
-        String[] titles = {"New request received", "Item updated", "Task completed", "New message", "Reminder"};
-        String[] messages = {"A new request is ready to review.", "An item was recently updated.",
-                "A task was completed successfully.", "You received a new message.",
-                "You have an upcoming activity."};
-        String[] times = {"Just now", "5 min ago", "18 min ago", "1 hour ago", "Yesterday"};
-        int[] icons = {R.drawable.ic_activity_people, R.drawable.ic_list_grid,
-                R.drawable.ic_user_certificate, R.drawable.ic_user_email, R.drawable.ic_user_calendar};
-        for (int i = 0; i < titles.length; i++) {
-            NotificationItem item = new NotificationItem();
-            item.title = titles[i];
-            item.message = messages[i];
-            item.time = times[i];
-            item.icon = icons[i];
-            notifications.add(item);
-        }
-        return notifications;
-    }
-}
-```
-
-### `app/src/main/res/layout/activity_dashboard_sample.xml`
+#### `app/src/main/res/layout/activity_dashboard_sample.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -3198,7 +1167,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#FFFFFF"
+    android:background="@color/white"
     android:paddingHorizontal="20dp">
     <LinearLayout
         android:layout_width="match_parent"
@@ -3212,7 +1181,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
             android:padding="9dp"
             android:background="@drawable/dashboard_logo_background"
             android:src="@drawable/ic_list_grid"
-            android:tint="#FFFFFF" />
+            android:tint="@color/white" />
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -3223,15 +1192,15 @@ public class DashboardSampleActivity extends AppCompatActivity {
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_brand"
-                android:textColor="#101A23"
-                android:textSize="20sp"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_section_heading"
                 android:textStyle="bold" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_panel"
-                android:textColor="#8191A1"
-                android:textSize="13sp" />
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_subheading" />
         </LinearLayout>
         <FrameLayout
             android:id="@+id/dashboard_notifications_button"
@@ -3254,7 +1223,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
                 android:layout_gravity="top|end"
                 android:layout_margin="5dp"
                 android:background="@drawable/user_avatar_background"
-                android:backgroundTint="#EF4260" />
+                android:backgroundTint="@color/destructive" />
         </FrameLayout>
         <TextView
             android:layout_width="40dp"
@@ -3263,25 +1232,25 @@ public class DashboardSampleActivity extends AppCompatActivity {
             android:background="@drawable/user_avatar_background"
             android:gravity="center"
             android:text="@string/dashboard_initials"
-            android:textColor="#08783F"
+            android:textColor="@color/primary_dark"
             android:textStyle="bold"
-            android:textSize="16sp" />
+            android:textSize="@dimen/type_body_large" />
     </LinearLayout>
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="20dp"
         android:text="@string/dashboard_greeting"
-        android:textSize="26sp"
+        android:textSize="@dimen/type_metric"
         android:textStyle="bold"
-        android:textColor="#101A23" />
+        android:textColor="@color/text_heading" />
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="5dp"
         android:text="@string/dashboard_description"
-        android:textSize="13sp"
-        android:textColor="#8191A1" />
+        android:textSize="@dimen/type_subheading"
+        android:textColor="@color/text_subheading" />
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -3306,7 +1275,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:padding="9dp"
                         android:background="@drawable/user_avatar_background"
                         android:src="@drawable/ic_activity_people"
-                        android:tint="#08783F" />
+                        android:tint="@color/primary_dark" />
                     <Space
                         android:layout_width="0dp"
                         android:layout_height="1dp"
@@ -3317,11 +1286,11 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="5dp"
                         android:background="@drawable/menu_search_background"
-                        android:backgroundTint="#E6F7EE"
+                        android:backgroundTint="@color/primary_light"
                         android:text="@string/dashboard_users_growth"
-                        android:textColor="#08783F"
+                        android:textColor="@color/primary_dark"
                         android:textStyle="bold"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/type_label" />
                 </LinearLayout>
                 <TextView
                     android:id="@+id/dashboard_users"
@@ -3352,7 +1321,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:padding="9dp"
                         android:background="@drawable/user_avatar_background"
                         android:src="@drawable/ic_list_grid"
-                        android:tint="#08783F" />
+                        android:tint="@color/primary_dark" />
                     <Space
                         android:layout_width="0dp"
                         android:layout_height="1dp"
@@ -3363,11 +1332,11 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="5dp"
                         android:background="@drawable/menu_search_background"
-                        android:backgroundTint="#E6F7EE"
+                        android:backgroundTint="@color/primary_light"
                         android:text="@string/dashboard_items_growth"
-                        android:textColor="#08783F"
+                        android:textColor="@color/primary_dark"
                         android:textStyle="bold"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/type_label" />
                 </LinearLayout>
                 <TextView
                     android:id="@+id/dashboard_items"
@@ -3403,7 +1372,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:padding="9dp"
                         android:background="@drawable/user_avatar_background"
                         android:src="@drawable/ic_user_calendar"
-                        android:tint="#08783F" />
+                        android:tint="@color/primary_dark" />
                     <Space
                         android:layout_width="0dp"
                         android:layout_height="1dp"
@@ -3414,11 +1383,11 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="5dp"
                         android:background="@drawable/menu_search_background"
-                        android:backgroundTint="#E6F7EE"
+                        android:backgroundTint="@color/primary_light"
                         android:text="@string/dashboard_requests_growth"
-                        android:textColor="#08783F"
+                        android:textColor="@color/primary_dark"
                         android:textStyle="bold"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/type_label" />
                 </LinearLayout>
                 <TextView
                     android:id="@+id/dashboard_requests"
@@ -3449,7 +1418,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:padding="9dp"
                         android:background="@drawable/user_avatar_background"
                         android:src="@drawable/ic_user_id"
-                        android:tint="#08783F" />
+                        android:tint="@color/primary_dark" />
                     <Space
                         android:layout_width="0dp"
                         android:layout_height="1dp"
@@ -3460,11 +1429,11 @@ public class DashboardSampleActivity extends AppCompatActivity {
                         android:paddingHorizontal="10dp"
                         android:paddingVertical="5dp"
                         android:background="@drawable/menu_search_background"
-                        android:backgroundTint="#E6F7EE"
+                        android:backgroundTint="@color/primary_light"
                         android:text="@string/dashboard_completed_growth"
-                        android:textColor="#08783F"
+                        android:textColor="@color/primary_dark"
                         android:textStyle="bold"
-                        android:textSize="12sp" />
+                        android:textSize="@dimen/type_label" />
                 </LinearLayout>
                 <TextView
                     android:id="@+id/dashboard_completed"
@@ -3488,7 +1457,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
             android:padding="10dp"
             android:background="@drawable/user_avatar_background"
             android:src="@drawable/ic_user_id"
-            android:tint="#08783F" />
+            android:tint="@color/primary_dark" />
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -3500,16 +1469,16 @@ public class DashboardSampleActivity extends AppCompatActivity {
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/dashboard_important"
-                android:textSize="18sp"
+                android:textSize="@dimen/type_card_heading"
                 android:textStyle="bold"
-                android:textColor="#101A23" />
+                android:textColor="@color/text_heading" />
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="3dp"
                 android:text="@string/dashboard_important_subtitle"
-                android:textSize="12sp"
-                android:textColor="#8191A1" />
+                android:textSize="@dimen/type_label"
+                android:textColor="@color/text_subheading" />
         </LinearLayout>
         <TextView
             android:id="@+id/dashboard_important_count"
@@ -3521,9 +1490,9 @@ public class DashboardSampleActivity extends AppCompatActivity {
             android:gravity="center"
             android:background="@drawable/menu_search_background"
             android:text="@string/dashboard_count"
-            android:textSize="13sp"
+            android:textSize="@dimen/type_subheading"
             android:textStyle="bold"
-            android:textColor="#8191A1" />
+            android:textColor="@color/text_subheading" />
     </LinearLayout>
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/dashboard_important_list"
@@ -3537,13 +1506,5304 @@ public class DashboardSampleActivity extends AppCompatActivity {
 </LinearLayout>
 ```
 
-### `app/src/main/res/values/dashboard_sample_strings.xml`
+#### `app/src/main/res/layout/activity_sample_activity_show.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/activity_show_background"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+        <ImageView
+            android:id="@+id/activity_show_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:id="@+id/activity_show_reference"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/activity_show_sample_reference"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_section_heading" />
+        <View
+            android:layout_width="40dp"
+            android:layout_height="40dp" />
+    </LinearLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="16dp"
+            android:paddingBottom="24dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_horizontal"
+                android:orientation="vertical"
+                android:paddingTop="24dp"
+                android:paddingBottom="14dp">
+                <ImageView
+                    android:id="@+id/activity_show_icon"
+                    android:layout_width="76dp"
+                    android:layout_height="76dp"
+                    android:background="@drawable/activity_show_icon_background"
+                    android:contentDescription="@string/activity_show_icon_description"
+                    android:elevation="5dp"
+                    android:padding="20dp"
+                    android:src="@drawable/ic_activity_summary" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:gravity="center"
+                    android:text="@string/activity_show_hero_title"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_page_heading" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center"
+                    android:text="@string/activity_show_hero_subtitle"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <LinearLayout style="@style/ActivityShowCard">
+                <TextView
+                    style="@style/ActivityShowHeading"
+                    android:text="@string/activity_show_overview" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/activity_show_title_label"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_label" />
+                <TextView
+                    android:id="@+id/activity_show_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/sample_activity_title"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_body_large" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:text="@string/activity_show_organizer_label"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_label" />
+                <TextView
+                    android:id="@+id/activity_show_organizer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:text="@string/sample_activity_subtitle"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_body" />
+            </LinearLayout>
+            <LinearLayout style="@style/ActivityShowCard">
+                <TextView
+                    style="@style/ActivityShowHeading"
+                    android:text="@string/activity_show_schedule" />
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_date_label" />
+                    <TextView
+                        android:id="@+id/activity_show_date"
+                        style="@style/ActivityShowValueBadge"
+                        android:text="@string/sample_activity_date" />
+                </LinearLayout>
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_time_label" />
+                    <TextView
+                        android:id="@+id/activity_show_time"
+                        style="@style/ActivityShowValue"
+                        android:text="@string/sample_activity_time" />
+                </LinearLayout>
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_mode_label" />
+                    <TextView
+                        android:id="@+id/activity_show_mode"
+                        style="@style/ActivityShowValueBadge"
+                        android:text="@string/sample_activity_mode" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/ActivityShowCard">
+                <TextView
+                    style="@style/ActivityShowHeading"
+                    android:text="@string/activity_show_payment" />
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_payment_method" />
+                    <TextView
+                        style="@style/ActivityShowValue"
+                        android:text="@string/activity_show_not_required" />
+                </LinearLayout>
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_amount" />
+                    <TextView
+                        style="@style/ActivityShowValue"
+                        android:text="@string/activity_show_dash" />
+                </LinearLayout>
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="14dp"
+                    android:background="@color/search_border" />
+                <LinearLayout style="@style/ActivityShowRow">
+                    <TextView
+                        style="@style/ActivityShowLabel"
+                        android:text="@string/activity_show_total" />
+                    <TextView
+                        style="@style/ActivityShowValue"
+                        android:text="@string/activity_show_dash" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout style="@style/ActivityShowCard">
+                <TextView
+                    style="@style/ActivityShowHeading"
+                    android:text="@string/activity_show_notes" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:lineSpacingExtra="4dp"
+                    android:text="@string/activity_show_no_notes"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_sample_create_page.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/create_page_background"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+        <ImageView
+            android:id="@+id/create_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/create_page_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_section_heading"
+            android:textStyle="bold" />
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/create_save"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/form_action_solid"
+            android:paddingHorizontal="14dp"
+            android:text="@string/create_save"
+            android:textAllCaps="false"
+            android:textColor="@color/white"
+            android:textSize="@dimen/type_label" />
+    </LinearLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="12dp"
+            android:background="@drawable/admin_outline_background"
+            android:elevation="2dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <ImageView
+                    android:layout_width="22dp"
+                    android:layout_height="22dp"
+                    android:src="@drawable/ic_form_folder" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/create_page_heading"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_card_heading"
+                    android:textStyle="bold" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/create_page_subtitle"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_label" />
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="14dp"
+                android:background="@color/page_divider" />
+            <FrameLayout
+                android:id="@+id/create_image_picker"
+                android:layout_width="match_parent"
+                android:layout_height="104dp"
+                android:background="@drawable/form_upload_background"
+                android:clipToOutline="true">
+                <ImageView
+                    android:id="@+id/create_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitCenter"
+                    android:visibility="gone" />
+                <LinearLayout
+                    android:id="@+id/create_image_prompt"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:orientation="vertical">
+                    <ImageView
+                        android:layout_width="28dp"
+                        android:layout_height="28dp"
+                        android:src="@drawable/ic_form_upload" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:gravity="center"
+                        android:text="@string/create_image_hint"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_subheading" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:gravity="center"
+                        android:text="@string/create_image_note"
+                        android:textColor="@color/field_hint"
+                        android:textSize="@dimen/type_detail" />
+                </LinearLayout>
+            </FrameLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/CreateLabel"
+                        android:text="@string/create_name_label" />
+                    <EditText
+                        android:id="@+id/create_name"
+                        style="@style/CreateField"
+                        android:hint="@string/create_name_hint"
+                        android:inputType="textCapSentences"
+                        android:singleLine="true" />
+                    <TextView
+                        android:id="@+id/create_name_error"
+                        style="@style/CreateFieldError"
+                        android:text="@string/create_name_required"
+                        android:visibility="gone"
+                        tools:visibility="visible" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/CreateLabel"
+                        android:text="@string/create_date_label" />
+                    <EditText
+                        android:id="@+id/create_date"
+                        style="@style/CreateField"
+                        android:drawableStart="@drawable/ic_user_calendar"
+                        android:drawablePadding="4dp"
+                        android:drawableTint="@color/field_icon"
+                        android:focusable="false"
+                        android:hint="@string/create_date_hint" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView
+                style="@style/CreateLabel"
+                android:text="@string/create_description_label" />
+            <EditText
+                android:id="@+id/create_description"
+                style="@style/CreateField"
+                android:layout_height="88dp"
+                android:gravity="top"
+                android:hint="@string/create_description_hint"
+                android:inputType="textCapSentences|textMultiLine"
+                android:paddingVertical="10dp" />
+            <TextView
+                style="@style/CreateLabel"
+                android:text="@string/create_tags_label" />
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/create_tags"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                app:chipSpacingHorizontal="8dp"
+                app:chipSpacingVertical="8dp"
+                app:singleLine="false"
+                app:singleSelection="false">
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/create_tag_design"
+                    style="@style/AdminStatusChip"
+                    android:checked="true"
+                    android:text="@string/create_tag_design" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/create_tag_marketing"
+                    style="@style/AdminStatusChip"
+                    android:checked="true"
+                    android:text="@string/create_tag_marketing" />
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/create_tag_documentation"
+                    style="@style/AdminStatusChip"
+                    android:text="@string/create_tag_documentation" />
+            </com.google.android.material.chip.ChipGroup>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/CreateLabel"
+                        android:text="@string/create_number_label" />
+                    <EditText
+                        android:id="@+id/create_number"
+                        style="@style/CreateField"
+                        android:hint="@string/create_number_hint"
+                        android:inputType="numberDecimal"
+                        android:singleLine="true" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        style="@style/CreateLabel"
+                        android:text="@string/create_time_label" />
+                    <EditText
+                        android:id="@+id/create_time"
+                        style="@style/CreateField"
+                        android:drawableStart="@drawable/ic_activity_clock"
+                        android:drawablePadding="4dp"
+                        android:drawableTint="@color/field_icon"
+                        android:focusable="false"
+                        android:hint="@string/create_time_hint" />
+                </LinearLayout>
+            </LinearLayout>
+            <TextView
+                style="@style/CreateLabel"
+                android:text="@string/create_option_label" />
+            <Spinner
+                android:id="@+id/create_category"
+                style="@style/CreateField"
+                android:entries="@array/create_categories" />
+            <TextView
+                style="@style/CreateLabel"
+                android:text="@string/create_radio_label" />
+            <RadioGroup
+                android:id="@+id/create_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:checkedButton="@id/create_status_active"
+                android:orientation="horizontal">
+                <RadioButton
+                    android:id="@+id/create_status_active"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:buttonTint="@color/success"
+                    android:text="@string/create_radio_active"
+                    android:textSize="@dimen/type_subheading" />
+                <RadioButton
+                    android:id="@+id/create_status_inactive"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="18dp"
+                    android:buttonTint="@color/success"
+                    android:text="@string/create_radio_inactive"
+                    android:textSize="@dimen/type_subheading" />
+            </RadioGroup>
+            <CheckBox
+                android:id="@+id/create_visible"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:buttonTint="@color/success"
+                android:checked="true"
+                android:text="@string/create_checkbox"
+                android:textSize="@dimen/type_subheading" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_sample_report_page.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:fitsSystemWindows="true"
+    android:orientation="vertical">
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp">
+        <ImageButton
+            android:id="@+id/report_back"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_gravity="start|center_vertical"
+            android:layout_marginStart="20dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:fontFamily="@font/arial_rounded_mt_bold"
+            android:gravity="center"
+            android:text="@string/report_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_page_heading" />
+    </FrameLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:id="@+id/report_content"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="18dp"
+            android:paddingBottom="24dp">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:fontFamily="@font/arial_rounded_mt_bold"
+                android:text="@string/report_overview"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_report_title" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/report_overview_subtitle"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_body" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:background="@drawable/admin_feature_background"
+                android:orientation="vertical"
+                android:padding="24dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/report_total_count"
+                    android:textColor="@color/primary_light"
+                    android:textSize="@dimen/type_button" />
+                <TextView
+                    android:id="@+id/report_total"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:text="@string/report_sample_total"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/type_report_total" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/report_total_caption"
+                    android:textColor="@color/primary_light"
+                    android:textSize="@dimen/type_subheading" />
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/report_sample_label"
+                    android:textColor="@color/primary_lime"
+                    android:textSize="@dimen/type_label" />
+            </LinearLayout>
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:fontFamily="@font/arial_rounded_mt_bold"
+                android:text="@string/report_breakdown"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_report_section" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/report_breakdown_subtitle"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_subheading" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <include
+                    android:id="@+id/report_completed"
+                    layout="@layout/report_bar_row" />
+                <include
+                    android:id="@+id/report_progress"
+                    layout="@layout/report_bar_row" />
+                <include
+                    android:id="@+id/report_cancelled"
+                    layout="@layout/report_bar_row" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:background="@drawable/admin_outline_background"
+                android:orientation="vertical"
+                android:padding="20dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:text="@string/report_note_title"
+                    android:textColor="@color/primary_dark"
+                    android:textSize="@dimen/type_body_large" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/report_note"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+        </LinearLayout>
+    </ScrollView>
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/report_download"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginHorizontal="24dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:background="@drawable/report_download_background"
+        android:elevation="0dp"
+        android:fontFamily="@font/arial_rounded_mt_bold"
+        android:gravity="center"
+        android:paddingHorizontal="20dp"
+        android:stateListAnimator="@null"
+        android:text="@string/report_download_pdf"
+        android:textAllCaps="false"
+        android:textColor="@color/white"
+        android:textSize="@dimen/type_body_large" />
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/admin_transaction_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="76dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/admin_transaction_row_background">
+    <ImageView
+        android:id="@+id/transaction_icon"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:background="@drawable/admin_avatar_background"
+        android:padding="12dp"
+        android:tint="@color/primary_darkest"
+        tools:src="@drawable/ic_admin_shirt" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="10dp"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/transaction_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_body"
+            android:fontFamily="@font/arial_rounded_mt_bold"
+            tools:text="Tinek Detstar T-Shirt" />
+        <TextView
+            android:id="@+id/transaction_date"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:textColor="@color/text_subheading"
+            android:textSize="@dimen/type_label"
+            tools:text="Jul 12th 2024" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="end">
+        <TextView
+            android:id="@+id/transaction_status"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text_body"
+            android:textSize="@dimen/type_label"
+            tools:text="Completed" />
+        <TextView
+            android:id="@+id/transaction_reference"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:textColor="@color/text_subheading"
+            android:textSize="@dimen/type_detail"
+            tools:text="OJWEJS7ISNC" />
+    </LinearLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/bottom_sheet_notifications.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingHorizontal="20dp"
+    android:paddingBottom="28dp"
+    android:background="@drawable/dashboard_sheet_background">
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/menu_search_background"
+        android:backgroundTint="@color/primary_light" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="22dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/dashboard_notifications_title"
+            android:textSize="@dimen/type_page_heading"
+            android:textStyle="bold"
+            android:textColor="@color/text_heading" />
+        <TextView
+            android:id="@+id/notifications_close"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="@drawable/user_detail_background"
+            android:gravity="center"
+            android:text="×"
+            android:textSize="@dimen/type_large_heading"
+            android:textColor="@color/text_body" />
+    </LinearLayout>
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="440dp"
+        android:layout_marginTop="16dp">
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/notifications_list"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="8dp" />
+        <include
+            android:id="@+id/notifications_empty"
+            layout="@layout/view_empty_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/modal_status.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="24dp"
+    android:background="@drawable/modal_card">
+    <TextView
+        android:id="@+id/modal_icon"
+        android:layout_width="96dp"
+        android:layout_height="96dp"
+        android:textColor="@color/white"
+        android:textSize="@dimen/type_modal_symbol"
+        android:textStyle="bold"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:scaleX="0"
+        android:scaleY="0"
+        tools:background="@drawable/status_success_circle"
+        tools:scaleX="1"
+        tools:scaleY="1"
+        tools:text="?" />
+    <TextView
+        android:id="@+id/modal_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="center"
+        android:textSize="@dimen/type_page_heading"
+        android:textStyle="bold"
+        android:textColor="@color/text_heading"
+        android:accessibilityHeading="true"
+        tools:text="Confirm your action" />
+    <TextView
+        android:id="@+id/modal_message"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:gravity="center"
+        android:textSize="@dimen/type_button"
+        android:lineSpacingExtra="3dp"
+        android:textColor="@color/text_body"
+        tools:text="Are you sure you want to continue? Confirm to complete this action." />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="28dp"
+        android:orientation="horizontal">
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/modal_cancel"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:layout_marginEnd="12dp"
+            android:background="@drawable/modal_cancel"
+            android:text="@android:string/cancel"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_button"
+            android:textAllCaps="false" />
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/modal_confirm"
+            android:layout_width="0dp"
+            android:layout_height="52dp"
+            android:layout_weight="1"
+            android:background="@drawable/modal_confirm"
+            android:backgroundTint="@null"
+            android:elevation="6dp"
+            android:textColor="@color/white"
+            android:textSize="@dimen/type_button"
+            android:textAllCaps="false"
+            tools:text="@string/confirm_arrow" />
+    </LinearLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/report_bar_row.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="18dp"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+        <TextView
+            android:id="@+id/report_bar_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="@color/text_body"
+            android:textSize="@dimen/type_button" />
+        <TextView
+            android:id="@+id/report_bar_value"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="@font/arial_rounded_mt_bold"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_button" />
+    </LinearLayout>
+    <ProgressBar
+        android:id="@+id/report_bar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="12dp"
+        android:layout_marginTop="8dp"
+        android:progressBackgroundTint="@color/primary_light" />
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/sample_activity_card_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="8dp"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/primary_light"
+    app:cardBackgroundColor="@color/white">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp"
+        android:background="@drawable/activity_card_background">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="top">
+            <ImageView
+                android:id="@+id/activity_icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:padding="12dp"
+                android:background="@drawable/activity_icon_background"
+                android:src="@drawable/ic_user_email"
+                android:tint="@color/primary_dark" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="12dp"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/activity_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/sample_activity_title"
+                    android:textSize="@dimen/type_body_large"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_heading" />
+                <TextView
+                    android:id="@+id/activity_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/sample_activity_subtitle"
+                    android:textSize="@dimen/type_label"
+                    android:textColor="@color/text_subheading" />
+            </LinearLayout>
+            <ImageButton
+                android:id="@+id/activity_more"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_marginStart="8dp"
+                android:padding="8dp"
+                android:background="@drawable/user_detail_background"
+                android:src="@drawable/ic_activity_more" />
+        </LinearLayout>
+        <com.google.android.material.chip.ChipGroup
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            app:chipSpacingHorizontal="8dp"
+            app:chipSpacingVertical="8dp">
+            <TextView
+                android:id="@+id/activity_type"
+                style="@style/green_badge"
+                android:text="@string/sample_activity_type" />
+            <TextView
+                android:id="@+id/activity_date"
+                style="@style/UserDetail"
+                android:text="@string/sample_activity_date" />
+            <TextView
+                android:id="@+id/activity_time"
+                style="@style/UserDetail"
+                android:text="@string/sample_activity_time" />
+            <TextView
+                android:id="@+id/activity_mode"
+                style="@style/UserDetail"
+                android:text="@string/sample_activity_mode" />
+        </com.google.android.material.chip.ChipGroup>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <TextView
+                android:id="@+id/activity_organizer_avatar"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/user_avatar_background"
+                android:backgroundTint="@color/primary_light"
+                android:gravity="center"
+                android:text="@string/sample_activity_initials"
+                android:textStyle="bold"
+                android:textSize="@dimen/type_label"
+                android:textColor="@color/primary_dark" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:layout_marginEnd="8dp"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/activity_organizer_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/sample_activity_organizer"
+                    android:textSize="@dimen/type_label"
+                    android:textStyle="bold"
+                    android:textColor="@color/primary_dark" />
+                <TextView
+                    android:id="@+id/activity_organizer_role"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/sample_activity_role"
+                    android:textSize="@dimen/type_caption"
+                    android:textColor="@color/text_subheading" />
+            </LinearLayout>
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/activity_secondary_action"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="10dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:text="@string/sample_activity_secondary"
+                android:textColor="@color/text_body"
+                android:textSize="@dimen/type_detail"
+                android:textAllCaps="false"
+                app:cornerRadius="100dp"
+                app:strokeColor="@color/primary_light"
+                app:strokeWidth="1dp"
+                app:backgroundTint="@color/primary_light" />
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/activity_primary_action"
+                android:layout_width="wrap_content"
+                android:layout_height="36dp"
+                android:layout_marginStart="8dp"
+                android:minWidth="0dp"
+                android:paddingHorizontal="12dp"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:background="@drawable/activity_action_background"
+                android:backgroundTint="@null"
+                app:backgroundTint="@null"
+                android:text="@string/sample_activity_primary"
+                android:textColor="@color/white"
+                android:textSize="@dimen/type_detail"
+                android:textStyle="bold"
+                android:textAllCaps="false"
+                app:icon="@drawable/ic_user_chevron"
+                app:iconTint="@color/white"
+                app:iconSize="14dp"
+                app:iconGravity="textEnd"
+                app:iconPadding="6dp" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
+```
+
+#### `app/src/main/res/layout/sample_item_card_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="6dp"
+    android:layout_marginVertical="6dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="0dp"
+    app:strokeWidth="1dp"
+    app:strokeColor="@color/primary_light"
+    app:cardBackgroundColor="@color/white"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:layout_width="180dp">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="112dp">
+            <com.google.android.material.imageview.ShapeableImageView
+                android:id="@+id/item_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:scaleType="centerCrop"
+                android:src="@drawable/sample_item_photo"
+                app:shapeAppearanceOverlay="@style/ItemPhotoShape" />
+            <ImageButton
+                android:id="@+id/item_favorite"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:layout_gravity="top|end"
+                android:layout_margin="5dp"
+                android:padding="7dp"
+                android:background="@drawable/user_avatar_background"
+                android:backgroundTint="@color/primary_light"
+                android:src="@drawable/ic_item_heart" />
+            <TextView
+                android:id="@+id/item_status"
+                style="@style/green_badge"
+                android:layout_gravity="top|start"
+                android:text="@string/item_available"
+                android:textSize="@dimen/type_micro"
+                android:layout_marginStart="5dp"
+                android:layout_marginTop="5dp" />
+        </FrameLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="10dp">
+            <TextView
+                android:id="@+id/item_name"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sample_item_name"
+                android:textSize="@dimen/type_body"
+                android:textStyle="bold"
+                android:textColor="@color/text_heading"
+                android:maxLines="2"
+                android:ellipsize="end" />
+            <TextView
+                android:id="@+id/item_category"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:text="@string/sample_item_category"
+                android:textSize="@dimen/type_detail"
+                android:textColor="@color/text_subheading" />
+            <com.google.android.material.chip.ChipGroup
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                app:chipSpacingHorizontal="6dp"
+                app:chipSpacingVertical="4dp">
+                <TextView
+                    android:id="@+id/item_detail"
+                    style="@style/ItemChip.Info"
+                    android:text="@string/sample_item_detail" />
+                <TextView
+                    android:id="@+id/item_tag"
+                    style="@style/ItemChip.Tag"
+                    android:text="@string/sample_item_tag" />
+            </com.google.android.material.chip.ChipGroup>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:id="@+id/item_rating"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:drawableStart="@drawable/ic_item_star"
+                    android:drawablePadding="4dp"
+                    android:gravity="center_vertical"
+                    android:text="@string/sample_item_rating"
+                    android:textSize="@dimen/type_caption"
+                    android:textColor="@color/text_body" />
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="10dp"
+                    android:layout_marginHorizontal="5dp"
+                    android:background="@color/primary_light" />
+                <TextView
+                    android:id="@+id/item_location"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/sample_item_location"
+                    android:textSize="@dimen/type_caption"
+                    android:textColor="@color/text_body" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+                <TextView
+                    android:id="@+id/item_price"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:layout_marginEnd="4dp"
+                    android:text="@string/sample_item_price"
+                    android:textSize="@dimen/type_body_large"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_heading" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/item_view_details"
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:minWidth="0dp"
+                    android:background="@drawable/item_action_background"
+                    android:backgroundTint="@null"
+                    app:backgroundTint="@null"
+                    android:paddingHorizontal="8dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:text="@string/item_view_details"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/type_caption"
+                    android:textAllCaps="false"
+                    app:icon="@drawable/ic_user_chevron"
+                    app:iconTint="@color/white"
+                    app:iconGravity="textEnd"
+                    app:iconPadding="2dp"
+                    app:iconSize="12dp" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
+```
+
+#### `app/src/main/res/layout/sample_notification_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="5dp"
+    android:paddingHorizontal="12dp"
+    android:paddingVertical="6dp"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:background="@drawable/modal_card">
+    <ImageView
+        android:id="@+id/notification_icon"
+        android:layout_width="42dp"
+        android:layout_height="42dp"
+        android:padding="10dp"
+        android:background="@drawable/user_avatar_background"
+        android:src="@drawable/ic_dashboard_bell"
+        android:tint="@color/white" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/notification_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/dashboard_notification_title"
+            android:textSize="@dimen/type_body"
+            android:textStyle="bold"
+            android:textColor="@color/text_heading" />
+        <TextView
+            android:id="@+id/notification_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/dashboard_notification_message"
+            android:textSize="@dimen/type_label"
+            android:textColor="@color/text_subheading" />
+        <TextView
+            android:id="@+id/notification_time"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="5dp"
+            android:text="@string/dashboard_notification_time"
+            android:textSize="@dimen/type_caption"
+            android:textColor="@color/primary_dark" />
+    </LinearLayout>
+    <ImageView
+        android:id="@+id/notification_remove"
+        android:layout_width="32dp"
+        android:layout_height="32dp"
+        android:layout_marginStart="8dp"
+        android:background="@drawable/user_detail_background"
+        android:padding="9dp"
+        android:src="@drawable/ic_notification_close"
+        android:tint="@color/text_body" />
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/sample_person_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginVertical="7dp"
+    app:cardBackgroundColor="@color/white"
+    app:cardCornerRadius="20dp"
+    app:cardElevation="2dp"
+    app:strokeColor="@color/search_border"
+    app:strokeWidth="1dp">
+    <LinearLayout
+        android:background="@color/white"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <FrameLayout
+                android:layout_width="50dp"
+                android:layout_height="50dp">
+                <TextView
+                    android:id="@+id/user_initials"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:background="@drawable/user_avatar_background"
+                    android:gravity="center"
+                    android:text="@string/sample_user_initials"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/type_card_heading"
+                    android:textStyle="bold" />
+                <com.google.android.material.imageview.ShapeableImageView
+                    android:id="@+id/user_image"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone"
+                    app:shapeAppearanceOverlay="@style/UserAvatarShape" />
+            </FrameLayout>
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="12dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/user_name"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/sample_user_name"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_person_name"
+                    android:textStyle="bold" />
+                <TextView
+                    android:id="@+id/user_email"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="@string/sample_user_email"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_label" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/user_status"
+                    style="@style/green_badge"
+                    android:text="@string/user_active" />
+                <TextView
+                    android:id="@+id/user_joined"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:text="@string/sample_user_joined"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_caption" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+            <TextView
+                android:id="@+id/user_role"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/person_tag_background"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="7dp"
+                android:text="@string/sample_user_role"
+                android:textColor="@color/primary_dark"
+                android:textSize="@dimen/type_label" />
+            <TextView
+                android:id="@+id/user_specialty"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/person_tag_secondary_background"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="7dp"
+                android:text="@string/sample_user_specialty"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_label" />
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:background="@drawable/person_facts_background"
+            android:orientation="horizontal"
+            android:paddingHorizontal="10dp"
+            android:paddingVertical="12dp">
+            <LinearLayout style="@style/PersonFactColumn">
+                <TextView style="@style/PersonFactLabel" android:text="@string/person_age_label" />
+                <TextView android:id="@+id/user_age" style="@style/PersonFactValue" android:text="@string/sample_user_age" />
+            </LinearLayout>
+            <LinearLayout style="@style/PersonFactColumn">
+                <TextView style="@style/PersonFactLabel" android:text="@string/person_gender_label" />
+                <TextView android:id="@+id/user_gender" style="@style/PersonFactValue" android:text="@string/person_gender_sample" />
+            </LinearLayout>
+            <LinearLayout style="@style/PersonFactColumn">
+                <TextView style="@style/PersonFactLabel" android:text="@string/person_location_label" />
+                <TextView android:id="@+id/user_location" style="@style/PersonFactValue" android:text="@string/sample_user_location" />
+            </LinearLayout>
+            <LinearLayout style="@style/PersonFactColumn">
+                <TextView style="@style/PersonFactLabel" android:text="@string/person_credits_label" />
+                <TextView android:id="@+id/user_credits" style="@style/PersonFactValue" android:text="@string/sample_user_credits" />
+            </LinearLayout>
+        </LinearLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/person_quick_actions"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_label" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/user_edit"
+                android:layout_width="82dp"
+                android:layout_height="38dp"
+                android:background="@drawable/admin_outline_background"
+                android:elevation="2dp"
+                android:text="@string/user_edit"
+                android:textAllCaps="false"
+                android:textColor="@color/primary_dark"
+                android:textSize="@dimen/type_subheading" />
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/user_delete"
+                android:layout_width="82dp"
+                android:layout_height="38dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/admin_outline_background"
+                android:elevation="2dp"
+                android:text="@string/user_delete"
+                android:textAllCaps="false"
+                android:textColor="@color/destructive"
+                android:textSize="@dimen/type_subheading" />
+        </LinearLayout>
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>
+```
+
+#### `app/src/main/res/layout/toast_banner.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="16dp"
+    android:elevation="8dp"
+    android:accessibilityLiveRegion="polite"
+    tools:background="@drawable/modal_card">
+    <TextView
+        android:id="@+id/toast_icon"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:gravity="center"
+        android:includeFontPadding="false"
+        android:textSize="@dimen/type_large_heading"
+        android:textStyle="bold"
+        android:textColor="@color/white"
+        tools:background="@drawable/status_success_circle"
+        tools:text="✓" />
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:layout_marginStart="12dp"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/toast_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/type_body_large"
+            android:textStyle="bold"
+            android:textColor="@color/text_heading"
+            tools:text="Changes saved" />
+        <TextView
+            android:id="@+id/toast_message"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:textSize="@dimen/type_body"
+            android:textColor="@color/text_body"
+            tools:text="Your changes have been saved successfully." />
+    </LinearLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/view_empty_list.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginTop="16dp"
+    android:background="@drawable/admin_outline_background"
+    android:gravity="center"
+    android:orientation="vertical"
+    android:paddingHorizontal="24dp"
+    android:paddingVertical="38dp">
+    <FrameLayout
+        android:layout_width="76dp"
+        android:layout_height="76dp"
+        android:background="@drawable/user_avatar_background">
+        <ImageView
+            android:id="@+id/empty_list_icon"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:layout_gravity="center"
+            android:src="@drawable/ic_admin_box"
+            android:tint="@color/primary_dark" />
+    </FrameLayout>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="18dp"
+        android:fontFamily="@font/arial_rounded_mt_bold"
+        android:text="@string/empty_list_title"
+        android:textColor="@color/text_heading"
+        android:textSize="@dimen/type_card_heading_large" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:gravity="center"
+        android:text="@string/empty_list_message"
+        android:textColor="@color/text_subheading"
+        android:textSize="@dimen/type_subheading" />
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_sample_login.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="390dp"
+            android:background="@drawable/auth_hero_gradient">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:paddingHorizontal="28dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="108dp">
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/auth_back"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/auth_back_background"
+                    android:contentDescription="@string/auth_back"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_list_back"
+                    android:tint="@color/white" />
+                <Space
+                    android:layout_width="1dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+                <TextView
+                    android:id="@+id/auth_hero_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/type_auth_hero"
+                    android:text="@string/auth_login_title" />
+                <TextView
+                    android:id="@+id/auth_hero_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/primary_light"
+                    android:textSize="@dimen/type_body_large"
+                    android:text="@string/auth_login_subtitle" />
+            </LinearLayout>
+        </FrameLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-34dp"
+            android:background="@drawable/auth_sheet_background"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="34dp"
+            android:paddingBottom="42dp">
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/auth_email"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_subheading" />
+            <EditText
+                android:id="@+id/auth_email"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/auth_field_background"
+                android:hint="@string/auth_email_hint"
+                android:inputType="textEmailAddress"
+                android:paddingHorizontal="20dp"
+                android:singleLine="true"
+                android:textColor="@color/field_text"
+                android:textColorHint="@color/field_hint"
+                android:textSize="@dimen/type_body"
+                android:drawablePadding="14dp"
+                android:drawableStart="@drawable/ic_user_email" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/auth_password"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_subheading" />
+            <EditText
+                android:id="@+id/auth_password"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/auth_field_background"
+                android:hint="@string/auth_password_hint"
+                android:inputType="textPassword"
+                android:paddingHorizontal="20dp"
+                android:singleLine="true"
+                android:textColor="@color/field_text"
+                android:textColorHint="@color/field_hint"
+                android:textSize="@dimen/type_body"
+                android:drawablePadding="14dp"
+                android:drawableStart="@drawable/ic_auth_lock"
+                android:drawableEnd="@drawable/ic_auth_eye" />
+            <LinearLayout
+                android:id="@+id/auth_login_options"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="end"
+                android:orientation="horizontal">
+                <TextView
+                    android:id="@+id/auth_forgot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="@string/auth_forgot"
+                    android:textColor="@color/primary_dark"
+                    android:textSize="@dimen/type_label" />
+            </LinearLayout>
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/auth_submit"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/auth_button_background"
+                android:backgroundTint="@null"
+                android:text="@string/auth_login_action"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="@dimen/type_button"
+                android:drawableEnd="@drawable/ic_auth_arrow"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:gravity="center"
+                android:text="@string/auth_demo_credentials"
+                android:textColor="@color/text_subheading"
+                android:textSize="@dimen/type_caption" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/auth_no_account"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_body" />
+                <TextView
+                    android:id="@+id/auth_switch_link"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="@string/auth_signup_link"
+                    android:textColor="@color/primary_dark"
+                    android:textSize="@dimen/type_body" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
+```
+
+#### `app/src/main/res/layout/activity_sample_register.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="390dp"
+            android:background="@drawable/auth_hero_gradient">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical"
+                android:paddingHorizontal="28dp"
+                android:paddingTop="24dp"
+                android:paddingBottom="108dp">
+                <androidx.appcompat.widget.AppCompatImageButton
+                    android:id="@+id/auth_back"
+                    android:layout_width="40dp"
+                    android:layout_height="40dp"
+                    android:background="@drawable/auth_back_background"
+                    android:contentDescription="@string/auth_back"
+                    android:padding="10dp"
+                    android:src="@drawable/ic_list_back"
+                    android:tint="@color/white" />
+                <Space
+                    android:layout_width="1dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+                <TextView
+                    android:id="@+id/auth_hero_title"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:textColor="@color/white"
+                    android:textSize="@dimen/type_auth_hero"
+                    android:text="@string/auth_signup_title" />
+                <TextView
+                    android:id="@+id/auth_hero_subtitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:textColor="@color/primary_light"
+                    android:textSize="@dimen/type_body_large"
+                    android:text="@string/auth_signup_subtitle" />
+            </LinearLayout>
+        </FrameLayout>
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="-34dp"
+            android:background="@drawable/auth_sheet_background"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingTop="34dp"
+            android:paddingBottom="42dp">
+            <LinearLayout
+                android:id="@+id/auth_register_fields"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/auth_profile_photo_label"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_subheading" />
+                <FrameLayout
+                    android:id="@+id/auth_image_picker"
+                    android:layout_width="match_parent"
+                    android:layout_height="128dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/form_upload_background"
+                    android:clickable="true"
+                    android:focusable="true">
+                    <ImageView
+                        android:id="@+id/auth_image_preview"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:contentDescription="@string/auth_upload_title"
+                        android:scaleType="fitCenter"
+                        android:visibility="gone" />
+                    <LinearLayout
+                        android:id="@+id/auth_image_prompt"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <ImageView
+                            android:layout_width="28dp"
+                            android:layout_height="28dp"
+                            android:contentDescription="@null"
+                            android:src="@drawable/ic_form_upload"
+                            android:tint="@color/primary_dark" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:text="@string/auth_upload_title"
+                            android:textColor="@color/text_heading"
+                            android:textSize="@dimen/type_body" />
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/auth_upload_subtitle"
+                            android:textColor="@color/text_subheading"
+                            android:textSize="@dimen/type_label" />
+                    </LinearLayout>
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:orientation="horizontal">
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/auth_first_name"
+                            android:textColor="@color/text_heading"
+                            android:textSize="@dimen/type_subheading" />
+                        <EditText
+                            android:id="@+id/auth_first_name"
+                            android:layout_width="match_parent"
+                            android:layout_height="58dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/auth_field_background"
+                            android:hint="@string/auth_first_name_hint"
+                            android:inputType="textPersonName"
+                            android:paddingHorizontal="20dp"
+                            android:singleLine="true"
+                            android:textColor="@color/field_text"
+                            android:textColorHint="@color/field_hint"
+                            android:textSize="@dimen/type_body"
+                            android:drawablePadding="14dp" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="12dp"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/auth_last_name"
+                            android:textColor="@color/text_heading"
+                            android:textSize="@dimen/type_subheading" />
+                        <EditText
+                            android:id="@+id/auth_last_name"
+                            android:layout_width="match_parent"
+                            android:layout_height="58dp"
+                            android:layout_marginTop="8dp"
+                            android:background="@drawable/auth_field_background"
+                            android:hint="@string/auth_last_name_hint"
+                            android:inputType="textPersonName"
+                            android:paddingHorizontal="20dp"
+                            android:singleLine="true"
+                            android:textColor="@color/field_text"
+                            android:textColorHint="@color/field_hint"
+                            android:textSize="@dimen/type_body"
+                            android:drawablePadding="14dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/auth_email"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_subheading" />
+            <EditText
+                android:id="@+id/auth_email"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/auth_field_background"
+                android:hint="@string/auth_email_hint"
+                android:inputType="textEmailAddress"
+                android:paddingHorizontal="20dp"
+                android:singleLine="true"
+                android:textColor="@color/field_text"
+                android:textColorHint="@color/field_hint"
+                android:textSize="@dimen/type_body"
+                android:drawablePadding="14dp"
+                android:drawableStart="@drawable/ic_user_email" />
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/auth_password"
+                android:textColor="@color/text_heading"
+                android:textSize="@dimen/type_subheading" />
+            <EditText
+                android:id="@+id/auth_password"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="8dp"
+                android:background="@drawable/auth_field_background"
+                android:hint="@string/auth_password_hint"
+                android:inputType="textPassword"
+                android:paddingHorizontal="20dp"
+                android:singleLine="true"
+                android:textColor="@color/field_text"
+                android:textColorHint="@color/field_hint"
+                android:textSize="@dimen/type_body"
+                android:drawablePadding="14dp"
+                android:drawableStart="@drawable/ic_auth_lock"
+                android:drawableEnd="@drawable/ic_auth_eye" />
+            <LinearLayout
+                android:id="@+id/auth_confirm_field"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/auth_confirm_password"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_subheading" />
+                <EditText
+                    android:id="@+id/auth_confirm_password"
+                    android:layout_width="match_parent"
+                    android:layout_height="58dp"
+                    android:layout_marginTop="8dp"
+                    android:background="@drawable/auth_field_background"
+                    android:hint="@string/auth_confirm_hint"
+                    android:inputType="textPassword"
+                    android:paddingHorizontal="20dp"
+                    android:singleLine="true"
+                    android:textColor="@color/field_text"
+                    android:textColorHint="@color/field_hint"
+                    android:textSize="@dimen/type_body"
+                    android:drawablePadding="14dp"
+                    android:drawableStart="@drawable/ic_auth_lock" />
+            </LinearLayout>
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/auth_submit"
+                android:layout_width="match_parent"
+                android:layout_height="60dp"
+                android:layout_marginTop="28dp"
+                android:background="@drawable/auth_button_background"
+                android:backgroundTint="@null"
+                android:text="@string/auth_register_action"
+                android:textAllCaps="false"
+                android:textColor="@color/white"
+                android:textSize="@dimen/type_button"
+                android:drawableEnd="@drawable/ic_auth_arrow"
+                android:paddingStart="24dp"
+                android:paddingEnd="24dp" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="30dp"
+                android:gravity="center"
+                android:orientation="horizontal">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/auth_have_account"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_body" />
+                <TextView
+                    android:id="@+id/auth_switch_link"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="5dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:text="@string/auth_signin_link"
+                    android:textColor="@color/primary_dark"
+                    android:textSize="@dimen/type_body" />
+            </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>
+```
+
+#### `app/src/main/res/layout/activity_admin_profile.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/activity_show_background"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/profile_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/auth_back"
+            android:padding="8dp"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/admin_profile_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_page_heading" />
+        <Space
+            android:layout_width="40dp"
+            android:layout_height="40dp" />
+    </LinearLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            app:cardBackgroundColor="@color/white"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="3dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="196dp">
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="152dp"
+                        android:background="@drawable/profile_cover_background" />
+                    <TextView
+                        android:id="@+id/profile_avatar"
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:layout_gravity="top|start"
+                        android:layout_marginStart="24dp"
+                        android:layout_marginTop="112dp"
+                        android:background="@drawable/user_avatar_background"
+                        android:elevation="4dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:gravity="center"
+                        android:text="@string/admin_initials"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_metric" />
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="24dp"
+                    android:paddingBottom="24dp">
+                    <TextView
+                        android:id="@+id/profile_display_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/admin_profile_name"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_page_heading" />
+                    <TextView
+                        android:id="@+id/profile_display_email"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/admin_profile_email"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:background="@drawable/person_facts_background"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="14dp">
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_role_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/admin_profile_role" />
+                        </LinearLayout>
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_access_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/admin_profile_access" />
+                        </LinearLayout>
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_status_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/admin_profile_status" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/profile_public_heading"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_card_heading" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/profile_public_hint"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:text="@string/profile_name_label"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_label" />
+                    <EditText
+                        android:id="@+id/profile_name_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/form_field_background"
+                        android:inputType="textPersonName"
+                        android:paddingHorizontal="14dp"
+                        android:singleLine="true"
+                        android:textColor="@color/field_text"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:id="@+id/profile_name_error"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:text="@string/profile_name_error"
+                        android:textColor="@color/field_error"
+                        android:textSize="@dimen/type_caption"
+                        android:visibility="gone" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="@string/profile_email_label"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_label" />
+                    <EditText
+                        android:id="@+id/profile_email_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/form_field_background"
+                        android:inputType="textEmailAddress"
+                        android:paddingHorizontal="14dp"
+                        android:singleLine="true"
+                        android:textColor="@color/field_text"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:id="@+id/profile_email_error"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:text="@string/profile_email_error"
+                        android:textColor="@color/field_error"
+                        android:textSize="@dimen/type_caption"
+                        android:visibility="gone" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/profile_preferences_heading"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_card_heading" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/profile_notifications_label"
+                                android:textColor="@color/text_heading"
+                                android:textSize="@dimen/type_body" />
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/profile_notifications_hint"
+                                android:textColor="@color/text_subheading"
+                                android:textSize="@dimen/type_subheading" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/profile_notifications_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            app:thumbTint="@color/primary_dark"
+                            app:trackTint="@color/primary_light" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/profile_logout_label"
+                                android:textColor="@color/text_heading"
+                                android:textSize="@dimen/type_body" />
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/profile_logout_hint"
+                                android:textColor="@color/text_subheading"
+                                android:textSize="@dimen/type_subheading" />
+                        </LinearLayout>
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_logout"
+                            android:layout_width="90dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/admin_outline_background"
+                            android:text="@string/profile_logout_label"
+                            android:textAllCaps="false"
+                            android:textColor="@color/destructive"
+                            android:textSize="@dimen/type_label" />
+                    </LinearLayout>
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:gravity="end"
+                        android:orientation="horizontal">
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_cancel"
+                            android:layout_width="100dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/admin_outline_background"
+                            android:text="@string/profile_cancel"
+                            android:textAllCaps="false"
+                            android:textColor="@color/text_heading"
+                            android:textSize="@dimen/type_body" />
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_save"
+                            android:layout_width="140dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/form_action_solid"
+                            android:text="@string/profile_save"
+                            android:textAllCaps="false"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/type_body" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </ScrollView>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/popup_admin_account.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="188dp"
+    android:layout_height="wrap_content"
+    android:background="@drawable/admin_account_menu_background"
+    android:orientation="vertical"
+    android:padding="8dp">
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/account_profile"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:background="@android:color/transparent"
+        android:backgroundTint="@null"
+        android:gravity="center_vertical|start"
+        android:minWidth="0dp"
+        android:paddingHorizontal="14dp"
+        android:text="@string/admin_profile_action"
+        android:textAllCaps="false"
+        android:textColor="@color/text_heading"
+        android:textSize="@dimen/type_body" />
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginHorizontal="10dp"
+        android:background="@color/page_divider" />
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/account_logout"
+        android:layout_width="match_parent"
+        android:layout_height="46dp"
+        android:background="@android:color/transparent"
+        android:backgroundTint="@null"
+        android:gravity="center_vertical|start"
+        android:minWidth="0dp"
+        android:paddingHorizontal="14dp"
+        android:text="@string/admin_logout_action"
+        android:textAllCaps="false"
+        android:textColor="@color/destructive"
+        android:textSize="@dimen/type_body" />
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_personal_dashboard.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/white"
+    android:orientation="vertical"
+    tools:context=".PersonalDashboardActivity">
+    <LinearLayout
+        android:id="@+id/personal_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/dashboard_header_background"
+        android:elevation="8dp"
+        android:orientation="vertical"
+        android:paddingHorizontal="22dp"
+        android:paddingTop="22dp"
+        android:paddingBottom="20dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="@font/arial_rounded_mt_bold"
+                    android:text="@string/personal_dashboard_title"
+                    android:textColor="@color/text_heading"
+                    android:textSize="@dimen/type_page_heading" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/personal_dashboard_subtitle"
+                    android:textColor="@color/text_subheading"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <FrameLayout
+                android:id="@+id/personal_notifications_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:clickable="true"
+                android:contentDescription="@string/personal_dashboard_notifications"
+                android:focusable="true"
+                android:foreground="?attr/selectableItemBackgroundBorderless">
+                <ImageView
+                    android:id="@+id/personal_bell_icon"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:padding="8dp"
+                    android:src="@drawable/ic_dashboard_bell"
+                    android:tint="@color/dashboard_bell_tint" />
+                <View
+                    android:id="@+id/personal_notification_dot"
+                    android:layout_width="8dp"
+                    android:layout_height="8dp"
+                    android:layout_gravity="top|end"
+                    android:layout_margin="2dp"
+                    android:background="@drawable/user_avatar_background"
+                    android:backgroundTint="@color/destructive" />
+            </FrameLayout>
+            <TextView
+                android:id="@+id/personal_avatar_button"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="8dp"
+                android:background="@drawable/admin_avatar_background"
+                android:clickable="true"
+                android:contentDescription="@string/personal_dashboard_account"
+                android:focusable="true"
+                android:fontFamily="@font/arial_rounded_mt_bold"
+                android:foreground="?attr/selectableItemBackgroundBorderless"
+                android:gravity="center"
+                android:text="@string/personal_dashboard_initials"
+                android:textColor="@color/primary_dark"
+                android:textSize="@dimen/type_body" />
+        </LinearLayout>
+        <LinearLayout
+            android:id="@+id/personal_search_trigger"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_marginTop="18dp"
+            android:background="@drawable/menu_search_background"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ImageView
+                android:layout_width="44dp"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:padding="12dp"
+                android:src="@drawable/ic_list_search"
+                android:tint="@color/text_body" />
+            <TextView
+                android:id="@+id/personal_search"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:background="@android:color/transparent"
+                android:gravity="center_vertical"
+                android:paddingEnd="18dp"
+                android:text="@string/personal_dashboard_search"
+                android:textColor="@color/search_hint"
+                android:textSize="@dimen/type_body" />
+        </LinearLayout>
+    </LinearLayout>
+    <ScrollView
+        android:id="@+id/personal_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="22dp"
+            android:paddingTop="20dp"
+            android:paddingBottom="24dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <include
+                        android:id="@+id/seat_three"
+                        layout="@layout/view_personal_seat_tile"
+                        android:layout_width="match_parent"
+                        android:layout_height="224dp" />
+                    <include
+                        android:id="@+id/seat_six"
+                        layout="@layout/view_personal_seat_tile"
+                        android:layout_width="match_parent"
+                        android:layout_height="172dp"
+                        android:layout_marginTop="10dp" />
+                </LinearLayout>
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <include
+                        android:id="@+id/seat_five"
+                        layout="@layout/view_personal_seat_tile"
+                        android:layout_width="match_parent"
+                        android:layout_height="172dp" />
+                    <include
+                        android:id="@+id/seat_eight"
+                        layout="@layout/view_personal_seat_tile"
+                        android:layout_width="match_parent"
+                        android:layout_height="224dp"
+                        android:layout_marginTop="10dp" />
+                </LinearLayout>
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/personal_featured_title"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_section_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/personal_featured_subtitle"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/personal_featured_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/menu_search_background"
+                    android:gravity="center"
+                    android:minWidth="42dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/admin_zero_items"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/personal_featured_items"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:clipToPadding="false"
+                android:nestedScrollingEnabled="false"
+                android:scrollbars="none"
+                tools:itemCount="3"
+                tools:listitem="@layout/sample_item_card_list" />
+            <include
+                android:id="@+id/personal_featured_empty"
+                layout="@layout/view_empty_list"
+                android:visibility="gone" />
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="22dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/personal_activities_title"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_section_heading" />
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="3dp"
+                        android:text="@string/personal_activities_subtitle"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                </LinearLayout>
+                <TextView
+                    android:id="@+id/personal_activity_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/menu_search_background"
+                    android:gravity="center"
+                    android:minWidth="42dp"
+                    android:paddingHorizontal="12dp"
+                    android:paddingVertical="7dp"
+                    android:text="@string/admin_zero_items"
+                    android:textColor="@color/text_body"
+                    android:textSize="@dimen/type_subheading" />
+            </LinearLayout>
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/admin_outline_background"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <EditText
+                    android:id="@+id/personal_activities_search"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@android:color/transparent"
+                    android:hint="@string/personal_activities_search_hint"
+                    android:inputType="text"
+                    android:paddingStart="18dp"
+                    android:paddingEnd="4dp"
+                    android:singleLine="true"
+                    android:textColor="@color/search_text"
+                    android:textColorHint="@color/search_hint"
+                    android:textSize="@dimen/type_body" />
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@null"
+                    android:padding="12dp"
+                    android:src="@drawable/ic_list_search"
+                    android:tint="@color/text_heading" />
+            </LinearLayout>
+            <com.google.android.material.chip.ChipGroup
+                android:id="@+id/personal_activity_filters"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                app:chipSpacingHorizontal="8dp"
+                app:chipSpacingVertical="8dp"
+                app:selectionRequired="true"
+                app:singleLine="false"
+                app:singleSelection="true" />
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/personal_activity_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:nestedScrollingEnabled="false"
+                tools:itemCount="3"
+                tools:listitem="@layout/sample_activity_card_list" />
+            <include
+                android:id="@+id/personal_activities_empty"
+                layout="@layout/view_empty_list"
+                android:visibility="gone" />
+        </LinearLayout>
+    </ScrollView>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/bottom_sheet_personal_search.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/dashboard_sheet_background"
+    android:orientation="vertical"
+    android:paddingHorizontal="16dp"
+    android:paddingBottom="20dp">
+    <View
+        android:layout_width="36dp"
+        android:layout_height="4dp"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/menu_search_background"
+        android:backgroundTint="@color/primary_light" />
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:layout_marginTop="12dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:fontFamily="@font/arial_rounded_mt_bold"
+            android:text="@string/personal_search_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_page_heading" />
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/personal_search_close"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="@drawable/user_detail_background"
+            android:contentDescription="@string/personal_search_close_description"
+            android:padding="10dp"
+            android:src="@drawable/ic_notification_close" />
+    </LinearLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_marginTop="10dp"
+        android:background="@drawable/admin_outline_background"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+        <EditText
+            android:id="@+id/personal_search_input"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@android:color/transparent"
+            android:hint="@string/personal_search_hint"
+            android:inputType="text"
+            android:paddingStart="18dp"
+            android:paddingEnd="4dp"
+            android:singleLine="true"
+            android:textColor="@color/search_text"
+            android:textColorHint="@color/search_hint"
+            android:textSize="@dimen/type_body" />
+        <ImageView
+            android:layout_width="42dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:padding="12dp"
+            android:src="@drawable/ic_list_search"
+            android:tint="@color/text_heading" />
+    </LinearLayout>
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/personal_search_filters"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        app:chipSpacingHorizontal="8dp"
+        app:chipSpacingVertical="8dp"
+        app:selectionRequired="true"
+        app:singleLine="false"
+        app:singleSelection="true" />
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/personal_search_results"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            android:paddingBottom="16dp"
+            app:layoutManager="androidx.recyclerview.widget.GridLayoutManager"
+            app:spanCount="2"
+            tools:itemCount="3"
+            tools:listitem="@layout/sample_item_card_list" />
+        <include
+            android:id="@+id/personal_search_empty"
+            layout="@layout/view_empty_list"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+    </FrameLayout>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/activity_personal_profile.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/activity_show_background"
+    android:orientation="vertical">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="64dp"
+        android:background="@color/white"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="16dp">
+        <androidx.appcompat.widget.AppCompatImageButton
+            android:id="@+id/profile_back"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/auth_back"
+            android:padding="8dp"
+            android:src="@drawable/ic_list_back" />
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="@string/personal_profile_title"
+            android:textColor="@color/text_heading"
+            android:textSize="@dimen/type_page_heading" />
+        <Space
+            android:layout_width="40dp"
+            android:layout_height="40dp" />
+    </LinearLayout>
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_margin="16dp"
+            app:cardBackgroundColor="@color/white"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="3dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <FrameLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="196dp">
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="152dp"
+                        android:background="@drawable/profile_cover_background" />
+                    <TextView
+                        android:id="@+id/profile_avatar"
+                        android:layout_width="80dp"
+                        android:layout_height="80dp"
+                        android:layout_gravity="top|start"
+                        android:layout_marginStart="24dp"
+                        android:layout_marginTop="112dp"
+                        android:background="@drawable/user_avatar_background"
+                        android:elevation="4dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:gravity="center"
+                        android:text="@string/personal_dashboard_initials"
+                        android:textColor="@color/white"
+                        android:textSize="@dimen/type_metric" />
+                </FrameLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="24dp"
+                    android:paddingBottom="24dp">
+                    <TextView
+                        android:id="@+id/profile_display_name"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/personal_profile_name"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_page_heading" />
+                    <TextView
+                        android:id="@+id/profile_display_email"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/personal_profile_email"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:background="@drawable/person_facts_background"
+                        android:orientation="horizontal"
+                        android:paddingHorizontal="10dp"
+                        android:paddingVertical="14dp">
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_role_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/personal_profile_role" />
+                        </LinearLayout>
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_access_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/personal_profile_access" />
+                        </LinearLayout>
+                        <LinearLayout
+                            style="@style/PersonFactColumn">
+                            <TextView
+                                style="@style/PersonFactLabel"
+                                android:text="@string/profile_status_label" />
+                            <TextView
+                                style="@style/PersonFactValue"
+                                android:text="@string/personal_profile_status" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/profile_public_heading"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_card_heading" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/profile_public_hint"
+                        android:textColor="@color/text_subheading"
+                        android:textSize="@dimen/type_subheading" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="22dp"
+                        android:text="@string/profile_name_label"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_label" />
+                    <EditText
+                        android:id="@+id/profile_name_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/form_field_background"
+                        android:inputType="textPersonName"
+                        android:paddingHorizontal="14dp"
+                        android:singleLine="true"
+                        android:textColor="@color/field_text"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:id="@+id/profile_name_error"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:text="@string/profile_name_error"
+                        android:textColor="@color/field_error"
+                        android:textSize="@dimen/type_caption"
+                        android:visibility="gone" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="18dp"
+                        android:text="@string/profile_email_label"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_label" />
+                    <EditText
+                        android:id="@+id/profile_email_input"
+                        android:layout_width="match_parent"
+                        android:layout_height="54dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/form_field_background"
+                        android:inputType="textEmailAddress"
+                        android:paddingHorizontal="14dp"
+                        android:singleLine="true"
+                        android:textColor="@color/field_text"
+                        android:textSize="@dimen/type_body" />
+                    <TextView
+                        android:id="@+id/profile_email_error"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="5dp"
+                        android:text="@string/profile_email_error"
+                        android:textColor="@color/field_error"
+                        android:textSize="@dimen/type_caption"
+                        android:visibility="gone" />
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:fontFamily="@font/arial_rounded_mt_bold"
+                        android:text="@string/profile_preferences_heading"
+                        android:textColor="@color/text_heading"
+                        android:textSize="@dimen/type_card_heading" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/profile_notifications_label"
+                                android:textColor="@color/text_heading"
+                                android:textSize="@dimen/type_body" />
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/profile_notifications_hint"
+                                android:textColor="@color/text_subheading"
+                                android:textSize="@dimen/type_subheading" />
+                        </LinearLayout>
+                        <com.google.android.material.switchmaterial.SwitchMaterial
+                            android:id="@+id/profile_notifications_switch"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="12dp"
+                            app:thumbTint="@color/primary_dark"
+                            app:trackTint="@color/primary_light" />
+                    </LinearLayout>
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="26dp"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/profile_logout_label"
+                                android:textColor="@color/text_heading"
+                                android:textSize="@dimen/type_body" />
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="4dp"
+                                android:text="@string/profile_logout_hint"
+                                android:textColor="@color/text_subheading"
+                                android:textSize="@dimen/type_subheading" />
+                        </LinearLayout>
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_logout"
+                            android:layout_width="90dp"
+                            android:layout_height="40dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/admin_outline_background"
+                            android:text="@string/profile_logout_label"
+                            android:textAllCaps="false"
+                            android:textColor="@color/destructive"
+                            android:textSize="@dimen/type_label" />
+                    </LinearLayout>
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:layout_marginTop="28dp"
+                        android:background="@color/page_divider" />
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="24dp"
+                        android:gravity="end"
+                        android:orientation="horizontal">
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_cancel"
+                            android:layout_width="100dp"
+                            android:layout_height="48dp"
+                            android:background="@drawable/admin_outline_background"
+                            android:text="@string/profile_cancel"
+                            android:textAllCaps="false"
+                            android:textColor="@color/text_heading"
+                            android:textSize="@dimen/type_body" />
+                        <androidx.appcompat.widget.AppCompatButton
+                            android:id="@+id/profile_save"
+                            android:layout_width="140dp"
+                            android:layout_height="48dp"
+                            android:layout_marginStart="10dp"
+                            android:background="@drawable/form_action_solid"
+                            android:text="@string/profile_save"
+                            android:textAllCaps="false"
+                            android:textColor="@color/white"
+                            android:textSize="@dimen/type_body" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </ScrollView>
+</LinearLayout>
+```
+
+#### `app/src/main/res/layout/view_personal_seat_tile.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/admin_outline_background"
+    android:clipToOutline="true">
+    <ViewFlipper
+        android:id="@+id/seat_flipper"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:autoStart="false"
+        android:flipInterval="8000"
+        android:inAnimation="@android:anim/fade_in"
+        android:outAnimation="@android:anim/fade_out">
+        <ImageView
+            android:id="@+id/seat_image_first"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+        <ImageView
+            android:id="@+id/seat_image_second"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop" />
+    </ViewFlipper>
+    <TextView
+        android:id="@+id/seat_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:layout_margin="14dp"
+        android:fontFamily="@font/arial_rounded_mt_bold"
+        android:textColor="@color/text_heading"
+        android:textSize="@dimen/type_card_heading" />
+</FrameLayout>
+```
+
+### res/drawable (71 files)
+
+#### `app/src/main/res/drawable/activity_action_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/white_25">
+    <item>
+        <shape>
+            <corners
+                android:radius="100dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/primary"
+                android:endColor="@color/success" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/activity_card_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="20dp" />
+    <gradient
+        android:angle="225"
+        android:startColor="@color/primary_light"
+        android:centerColor="@color/white"
+        android:endColor="@color/white" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/activity_icon_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="14dp" />
+    <gradient
+        android:angle="270"
+        android:startColor="@color/primary_light"
+        android:endColor="@color/primary_light" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/activity_show_icon_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/primary"
+        android:endColor="@color/success" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/admin_avatar_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="100dp" />
+    <solid
+        android:color="@color/primary_light" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/admin_feature_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="24dp" />
+    <solid
+        android:color="@color/primary_darkest" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/admin_metric_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="22dp" />
+    <gradient
+        android:angle="315"
+        android:startColor="@color/primary_lime"
+        android:endColor="@color/primary_lime" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/admin_outline_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="22dp" />
+    <solid
+        android:color="@color/white" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/search_border" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/admin_transaction_row_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape>
+            <solid
+                android:color="@color/primary_light" />
+        </shape>
+    </item>
+    <item
+        android:bottom="1dp">
+        <shape>
+            <solid
+                android:color="@color/white" />
+        </shape>
+    </item>
+</layer-list>
+```
+
+#### `app/src/main/res/drawable/danger_card.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="24dp" />
+    <gradient
+        android:angle="225"
+        android:startColor="@color/white"
+        android:centerColor="@color/white"
+        android:endColor="@color/white" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/destructive" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/dashboard_header_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/white" />
+    <corners
+        android:bottomLeftRadius="24dp"
+        android:bottomRightRadius="24dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/dashboard_logo_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="14dp" />
+    <gradient
+        android:angle="315"
+        android:startColor="@color/primary_dark"
+        android:endColor="@color/primary_darkest" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/dashboard_sheet_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:topLeftRadius="24dp"
+        android:topRightRadius="24dp" />
+    <solid
+        android:color="@color/white" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/dashboard_stat_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="180dp"
+    android:height="152dp"
+    android:viewportWidth="180"
+    android:viewportHeight="152">
+    <path
+        android:fillColor="@color/primary_light"
+        android:pathData="M0,0H180V152H0Z" />
+    <path
+        android:fillColor="@color/primary_light"
+        android:pathData="M65,152C90,115 112,142 136,100C151,76 168,72 180,72V152Z" />
+    <path
+        android:fillColor="@color/primary_light"
+        android:pathData="M94,152C118,111 140,143 180,110V152Z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/form_action_solid.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="8dp" />
+    <solid android:color="@color/text_heading" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/form_field_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="8dp" />
+    <solid android:color="@color/field_background" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/field_border" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/form_upload_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners android:radius="10dp" />
+    <solid android:color="@color/white" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/field_upload_border"
+        android:dashWidth="5dp"
+        android:dashGap="5dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/green_badge.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:paddingMode="stack">
+    <item>
+        <shape>
+            <corners
+                android:radius="100dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/primary_light"
+                android:endColor="@color/primary_light" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/primary_light" />
+            <padding
+                android:left="28dp"
+                android:right="12dp"
+                android:top="6dp"
+                android:bottom="6dp" />
+        </shape>
+    </item>
+    <item
+        android:width="8dp"
+        android:height="8dp"
+        android:left="12dp"
+        android:gravity="left|center_vertical">
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/primary" />
+        </shape>
+    </item>
+</layer-list>
+```
+
+#### `app/src/main/res/drawable/ic_activity_clock.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,2 A10,10 0,1 1,12 22 A10,10 0,1 1,12 2 M12,6 V12 L16,14" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_activity_more.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/text_body"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3 A1,1 0,1 1,12 5 A1,1 0,1 1,12 3 M12,11 A1,1 0,1 1,12 13 A1,1 0,1 1,12 11 M12,19 A1,1 0,1 1,12 21 A1,1 0,1 1,12 19" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_activity_people.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,3 A4,4 0,1 1,9 11 A4,4 0,1 1,9 3 M2,21 V18 C2,12 16,12 16,18 V21 M17,3 C22,3 22,11 17,11 M19,14 C23,15 23,19 23,21" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_activity_summary.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="36dp"
+    android:height="36dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/white"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,5 H19 Q21,5 21,7 V20 Q21,22 19,22 H5 Q3,22 3,20 V7 Q3,5 5,5 Z M3,10 H21 M8,2 V7 M16,2 V7 M8,15 H16 M8,18 H13" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_admin_box.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/white"
+        android:strokeWidth="1.8"
+        android:strokeLineJoin="round"
+        android:pathData="M12,2L21,7v10l-9,5 -9,-5V7z M3,7l9,5 9,-5 M12,12v10" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_admin_shirt.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/primary_darkest"
+        android:pathData="M8,3h2c0,1.2 0.8,2 2,2s2,-0.8 2,-2h2l5,3 -2,4 -2,-1v12H7V9l-2,1 -2,-4z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_dashboard_bell.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/white"
+        android:pathData="M12,2c-0.55,0 -1,0.45 -1,1v0.08C7.56,3.56 5,6.5 5,10v4.3l-1.8,2.9c-0.4,0.65 0.07,1.5 0.83,1.5h15.94c0.76,0 1.23,-0.85 0.83,-1.5L19,14.3V10c0,-3.5 -2.56,-6.44 -6,-6.92V3c0,-0.55 -0.45,-1 -1,-1zM9.5,20h5c-0.23,1.16 -1.26,2 -2.5,2s-2.27,-0.84 -2.5,-2z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_form_folder.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3,7a2,2 0,0 1,2 -2h4l2,2h8a2,2 0,0 1,2 2v9a2,2 0,0 1,-2 2H5a2,2 0,0 1,-2 -2z M8,12h8v5H8z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_form_upload.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_subheading"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M6,17H5a3,3 0,0 1,-0.3 -5.98A7,7 0,0 1,18.4 9.2A4,4 0,0 1,19 17h-1 M12,20V10 M8.5,13.5L12,10l3.5,3.5" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_item_heart.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,21 C8,17 2,13 2,8 C2,2 9,1 12,6 C15,1 22,2 22,8 C22,13 16,17 12,21 Z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_item_heart_filled.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/destructive"
+        android:strokeColor="@color/destructive"
+        android:strokeWidth="0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,21 C8,17 2,13 2,8 C2,2 9,1 12,6 C15,1 22,2 22,8 C22,13 16,17 12,21 Z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_item_star.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="14dp"
+    android:height="14dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/badge_yellow"
+        android:strokeColor="@color/badge_yellow"
+        android:strokeWidth="0"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,1 L15.4,8.1 L23,9.2 L17.5,14.6 L18.8,22.2 L12,18.6 L5.2,22.2 L6.5,14.6 L1,9.2 L8.6,8.1 Z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_launcher_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/primary"
+        android:pathData="M0,0h108v108h-108z" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M9,0L9,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,0L19,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M29,0L29,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M39,0L39,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M49,0L49,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M59,0L59,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M69,0L69,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M79,0L79,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M89,0L89,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M99,0L99,108"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,9L108,9"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,19L108,19"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,29L108,29"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,39L108,39"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,49L108,49"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,59L108,59"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,69L108,69"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,79L108,79"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,89L108,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M0,99L108,99"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,29L89,29"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,39L89,39"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,49L89,49"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,59L89,59"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,69L89,69"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M19,79L89,79"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M29,19L29,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M39,19L39,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M49,19L49,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M59,19L59,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M69,19L69,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+    <path
+        android:fillColor="@color/transparent"
+        android:pathData="M79,19L79,89"
+        android:strokeWidth="0.8"
+        android:strokeColor="@color/white_20" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_launcher_foreground.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M31,63.928c0,0 6.4,-11 12.1,-13.1c7.2,-2.6 26,-1.4 26,-1.4l38.1,38.1L107,108.928l-32,-1L31,63.928z">
+        <aapt:attr
+            name="android:fillColor">
+            <gradient
+                android:endX="85.84757"
+                android:endY="92.4963"
+                android:startX="42.9492"
+                android:startY="49.59793"
+                android:type="linear">
+                <item
+                    android:color="@color/black_27"
+                    android:offset="0.0" />
+                <item
+                    android:color="@color/transparent"
+                    android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path
+        android:fillColor="@color/white"
+        android:fillType="nonZero"
+        android:pathData="M65.3,45.828l3.8,-6.6c0.2,-0.4 0.1,-0.9 -0.3,-1.1c-0.4,-0.2 -0.9,-0.1 -1.1,0.3l-3.9,6.7c-6.3,-2.8 -13.4,-2.8 -19.7,0l-3.9,-6.7c-0.2,-0.4 -0.7,-0.5 -1.1,-0.3C38.8,38.328 38.7,38.828 38.9,39.228l3.8,6.6C36.2,49.428 31.7,56.028 31,63.928h46C76.3,56.028 71.8,49.428 65.3,45.828zM43.4,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2c-0.3,-0.7 -0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C45.3,56.528 44.5,57.328 43.4,57.328L43.4,57.328zM64.6,57.328c-0.8,0 -1.5,-0.5 -1.8,-1.2s-0.1,-1.5 0.4,-2.1c0.5,-0.5 1.4,-0.7 2.1,-0.4c0.7,0.3 1.2,1 1.2,1.8C66.5,56.528 65.6,57.328 64.6,57.328L64.6,57.328z"
+        android:strokeWidth="1"
+        android:strokeColor="@color/transparent" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_list_back.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M19,12H5 M12,5L5,12L12,19" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_list_grid.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3,3H9V9H3Z M15,3H21V9H15Z M3,15H9V21H3Z M15,15H21V21H15Z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_list_plus.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,4V20 M4,12H20" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_list_search.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_heading"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M10.5,3.5a7,7 0,1 0,0,14a7,7 0,1 0,0,-14 M16,16L21,21" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_notification_close.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:pathData="M5,5L19,19 M19,5L5,19" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_report_download.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:pathData="M12,3V15 M7,10l5,5 5,-5 M4,17v3h16v-3"
+        android:strokeColor="@color/white"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_user_calendar.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5,5 H19 Q21,5 21,7 V20 Q21,22 19,22 H5 Q3,22 3,20 V7 Q3,5 5,5 Z M3,10 H21 M8,2 V7 M16,2 V7" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_user_chevron.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M9,5 L16,12 L9,19" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_user_email.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3,5 H21 V19 H3 Z M3,5 L12,12 L21,5" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_user_id.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M3,4 H21 V20 H3 Z M8,8 A2,2 0,1 1,8 12 A2,2 0,1 1,8 8 M5,17 C5,13 11,13 11,17 Z M14,8 H18 M14,12 H18 M14,16 H18" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_user_location.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,22 C9,18 4,13 4,9 A8,8 0,1 1,20 9 C20,13 15,18 12,22 Z M12,6 A3,3 0,1 1,12 12 A3,3 0,1 1,12 6" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/item_action_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/white_25">
+    <item>
+        <shape>
+            <corners
+                android:radius="100dp" />
+            <gradient
+                android:angle="315"
+                android:startColor="@color/primary"
+                android:endColor="@color/success" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/item_info_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid
+        android:color="@color/primary_light" />
+    <corners
+        android:radius="100dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/menu_search_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="100dp" />
+    <solid
+        android:color="@color/search_background" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/modal_cancel.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/success_9">
+    <item>
+        <shape>
+            <corners
+                android:radius="12dp" />
+            <solid
+                android:color="@color/white_38" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/primary_light" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/modal_card.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <corners
+        android:radius="24dp" />
+    <gradient
+        android:angle="225"
+        android:startColor="@color/primary_light"
+        android:centerColor="@color/primary_light"
+        android:endColor="@color/white" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/modal_confirm.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/white_25">
+    <item>
+        <shape>
+            <corners
+                android:radius="12dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/primary"
+                android:endColor="@color/success" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/modal_danger.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/white_25">
+    <item>
+        <shape>
+            <corners
+                android:radius="12dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/destructive"
+                android:endColor="@color/badge_red" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/person_facts_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/field_background" />
+    <corners android:radius="14dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/person_tag_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/primary_light" />
+    <corners android:radius="100dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/person_tag_secondary_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/field_background" />
+    <corners android:radius="100dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/red_badge.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:paddingMode="stack">
+    <item>
+        <shape>
+            <corners
+                android:radius="100dp" />
+            <gradient
+                android:angle="270"
+                android:startColor="@color/white"
+                android:endColor="@color/white" />
+            <stroke
+                android:width="1dp"
+                android:color="@color/destructive" />
+            <padding
+                android:left="28dp"
+                android:right="12dp"
+                android:top="6dp"
+                android:bottom="6dp" />
+        </shape>
+    </item>
+    <item
+        android:width="8dp"
+        android:height="8dp"
+        android:left="12dp"
+        android:gravity="left|center_vertical">
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/destructive" />
+        </shape>
+    </item>
+</layer-list>
+```
+
+#### `app/src/main/res/drawable/report_download_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<ripple
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/white_20">
+    <item>
+        <shape>
+            <corners
+                android:radius="16dp" />
+            <gradient
+                android:angle="90"
+                android:startColor="@color/primary"
+                android:endColor="@color/success" />
+        </shape>
+    </item>
+</ripple>
+```
+
+#### `app/src/main/res/drawable/status_danger_circle.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/white" />
+        </shape>
+    </item>
+    <item
+        android:left="6dp"
+        android:top="6dp"
+        android:right="6dp"
+        android:bottom="6dp">
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/badge_red" />
+        </shape>
+    </item>
+    <item
+        android:left="13dp"
+        android:top="13dp"
+        android:right="13dp"
+        android:bottom="13dp">
+        <shape
+            android:shape="oval">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/destructive"
+                android:endColor="@color/badge_red" />
+        </shape>
+    </item>
+</layer-list>
+```
+
+#### `app/src/main/res/drawable/status_success_circle.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<layer-list
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/primary_light" />
+        </shape>
+    </item>
+    <item
+        android:left="6dp"
+        android:top="6dp"
+        android:right="6dp"
+        android:bottom="6dp">
+        <shape
+            android:shape="oval">
+            <solid
+                android:color="@color/primary_light" />
+        </shape>
+    </item>
+    <item
+        android:left="13dp"
+        android:top="13dp"
+        android:right="13dp"
+        android:bottom="13dp">
+        <shape
+            android:shape="oval">
+            <gradient
+                android:angle="270"
+                android:startColor="@color/primary"
+                android:endColor="@color/success" />
+        </shape>
+    </item>
+</layer-list>
+```
+
+#### `app/src/main/res/drawable/user_avatar_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid
+        android:color="@color/primary_darkest" />
+    <corners
+        android:radius="100dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/user_detail_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid
+        android:color="@color/primary_light" />
+    <corners
+        android:radius="100dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/auth_back_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/white_20" />
+    <corners android:radius="12dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/auth_button_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/primary_darkest" />
+    <corners android:radius="28dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/auth_field_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/field_background" />
+    <corners android:radius="26dp" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/field_border" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/auth_hero_gradient.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="0"
+        android:startColor="@color/primary_darkest"
+        android:centerColor="@color/primary_dark"
+        android:endColor="@color/primary" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/auth_sheet_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/white" />
+    <corners
+        android:topLeftRadius="34dp"
+        android:topRightRadius="34dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/ic_auth_arrow.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/white"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2"
+        android:pathData="M4,12h15 M13,6l6,6 -6,6" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_auth_eye.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8"
+        android:pathData="M2,12C4.5,7.5 7.8,5.5 12,5.5S19.5,7.5 22,12C19.5,16.5 16.2,18.5 12,18.5S4.5,16.5 2,12z M12,9a3,3 0,1 0,0 6a3,3 0,0 0,0 -6z" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/ic_auth_lock.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="@color/text_body"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="1.8"
+        android:pathData="M5,10h14v11H5z M8,10V7a4,4 0,0 1,8 0v3 M12,14v3" />
+</vector>
+```
+
+#### `app/src/main/res/drawable/admin_account_menu_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/white" />
+    <corners android:radius="16dp" />
+    <stroke
+        android:width="1dp"
+        android:color="@color/search_border" />
+</shape>
+```
+
+### res/color (4 files)
+
+#### `app/src/main/res/color/admin_status_chip_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_checked="true"
+        android:color="@color/primary_darkest" />
+    <item
+        android:color="@color/primary_light" />
+</selector>
+```
+
+#### `app/src/main/res/color/admin_status_chip_text.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_checked="true"
+        android:color="@color/white" />
+    <item
+        android:color="@color/text_body" />
+</selector>
+```
+
+#### `app/src/main/res/color/dashboard_bell_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_selected="true"
+        android:color="@color/primary_light" />
+    <item
+        android:color="@color/primary_light" />
+</selector>
+```
+
+#### `app/src/main/res/color/dashboard_bell_tint.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<selector
+    xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:state_selected="true"
+        android:color="@color/success" />
+    <item
+        android:color="@color/text_heading" />
+</selector>
+```
+
+#### `app/src/main/res/drawable/item_show_icon_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/white" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/item_show_sheet_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="@color/white" />
+    <corners
+        android:topLeftRadius="30dp"
+        android:topRightRadius="30dp" />
+</shape>
+```
+
+#### `app/src/main/res/drawable/profile_cover_background.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="0"
+        android:startColor="@color/primary_darkest"
+        android:centerColor="@color/primary_dark"
+        android:endColor="@color/primary" />
+</shape>
+```
+
+### res/values (27 files)
+
+#### `app/src/main/res/values/personal_dashboard_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="personal_dashboard_title">My Dashboard</string>
+    <string name="personal_dashboard_subtitle">Explore what matters to you.</string>
+    <string name="personal_dashboard_search">Search anything...</string>
+    <string name="personal_dashboard_notifications">Notifications</string>
+    <string name="personal_dashboard_account">Account</string>
+    <string name="personal_dashboard_initials">AR</string>
+    <string name="personal_profile_title">My Profile</string>
+    <string name="personal_profile_name">Alex Rivera</string>
+    <string name="personal_profile_role">Member</string>
+    <string name="personal_profile_access">Personal dashboard</string>
+    <string name="personal_profile_status">Active</string>
+    <string name="personal_notification_reservation_title">Reservation confirmed</string>
+    <string name="personal_notification_reservation_message">Your table is ready for your visit.</string>
+    <string name="personal_notification_item_title">New item to explore</string>
+    <string name="personal_notification_item_message">Take a look at what is new on the menu.</string>
+    <string name="personal_notification_appointment_title">Appointment reminder</string>
+    <string name="personal_notification_appointment_message">You have an upcoming appointment.</string>
+    <string name="personal_notification_now">Just now</string>
+    <string name="personal_notification_hour">1 hour ago</string>
+    <string name="personal_notification_yesterday">Yesterday</string>
+    <string name="personal_featured_title">Featured Items</string>
+    <string name="personal_featured_subtitle">Picked for you to explore</string>
+    <string name="personal_activities_title">Activities</string>
+    <string name="personal_activities_subtitle">Recent invitations and activities</string>
+    <string name="personal_activities_search_hint">Search activities…</string>
+    <string name="personal_activity_filter_all">All</string>
+    <string name="personal_activity_filter_online">Online</string>
+    <string name="personal_activity_filter_in_person">In person</string>
+    <string name="personal_search_title">Explore items</string>
+    <string name="personal_search_hint">Search items…</string>
+    <string name="personal_search_close_description">Close search</string>
+    <string name="personal_search_all">All</string>
+    <string name="personal_seat_three">3 Seaters</string>
+    <string name="personal_seat_five">5 Seaters</string>
+    <string name="personal_seat_six">6 Seaters</string>
+    <string name="personal_seat_eight">8 Seaters</string>
+</resources>
+```
+
+#### `app/src/main/res/values/admin_account_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="admin_account_menu">Open account menu</string>
+    <string name="admin_profile_action">Profile</string>
+    <string name="admin_logout_action">Logout</string>
+    <string name="admin_profile_title">My Profile</string>
+    <string name="admin_profile_name">Kevin Merico</string>
+    <string name="admin_profile_role">Administrator</string>
+    <string name="admin_profile_access">Admin dashboard</string>
+    <string name="admin_profile_status">Active</string>
+</resources>
+```
+
+#### `app/src/main/res/values/auth_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="auth_login_title">Welcome\nBack</string>
+    <string name="auth_login_subtitle">Glad to see you again.\nSign in to continue your journey.</string>
+    <string name="auth_signup_title">Create Your\nAccount</string>
+    <string name="auth_signup_subtitle">Join us and start your journey today.</string>
+    <string name="auth_first_name">First Name</string>
+    <string name="auth_last_name">Last Name</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_confirm_password">Confirm Password</string>
+    <string name="auth_first_name_hint">Enter your first name</string>
+    <string name="auth_last_name_hint">Enter your last name</string>
+    <string name="auth_email_hint">Email address</string>
+    <string name="auth_password_hint">Enter your password</string>
+    <string name="auth_confirm_hint">Confirm your password</string>
+    <string name="auth_forgot">Forgot Password?</string>
+    <string name="auth_login_action">Sign In</string>
+    <string name="auth_register_action">Create Account</string>
+    <string name="auth_upload_title">Add profile photo</string>
+    <string name="auth_upload_subtitle">Tap to choose an image</string>
+    <string name="auth_back">Back</string>
+    <string name="auth_sample_title">Password reset</string>
+    <string name="auth_sample_message">Password reset is not available yet.</string>
+    <string name="auth_required">Please fill in this field</string>
+    <string name="auth_password_mismatch">Passwords do not match</string>
+    <string name="auth_no_account">Don’t have an account?</string>
+    <string name="auth_have_account">Already have an account?</string>
+    <string name="auth_signup_link">Sign Up</string>
+    <string name="auth_signin_link">Sign In</string>
+    <string name="auth_profile_photo_label">Profile Photo</string>
+    <string name="auth_login_failed">Sign in failed</string>
+    <string name="auth_login_failed_message">Check your email and password.</string>
+    <string name="auth_email_exists">This email is already registered</string>
+    <string name="auth_demo_credentials">Demo: morgan.lee@example.com (Admin) or alex.rivera@example.com (Personal). Password: 1234</string>
+</resources>
+```
+
+#### `app/src/main/res/values/activity_card_strings.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string
-        name="dashboard_open">Open dashboard sample</string>
+        name="sample_activity_title">You’re invited to Web Development Class</string>
+    <string
+        name="sample_activity_subtitle">by Alex Rivera</string>
+    <string
+        name="sample_activity_type">Invitation</string>
+    <string
+        name="sample_activity_date">Feb 5, 2024</string>
+    <string
+        name="sample_activity_time">6:00 PM – 7:00 PM</string>
+    <string
+        name="sample_activity_mode">Online</string>
+    <string
+        name="sample_activity_initials">AR</string>
+    <string
+        name="sample_activity_organizer">Alex Rivera</string>
+    <string
+        name="sample_activity_role">Organizer</string>
+    <string
+        name="sample_activity_secondary">Decline</string>
+    <string
+        name="sample_activity_primary">Accept</string>
+    <string name="activity_accept_title">Accept invitation?</string>
+    <string name="activity_decline_title">Decline invitation?</string>
+    <string name="activity_accepted">Invitation accepted</string>
+    <string name="activity_declined">Invitation declined</string>
+</resources>
+```
+
+#### `app/src/main/res/values/activity_show_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="activity_show_reference">#ACT-%1$05d</string>
+    <string name="activity_show_sample_reference">#ACT-00001</string>
+    <string name="activity_show_overview">Activity details</string>
+    <string name="activity_show_schedule">Schedule details</string>
+    <string name="activity_show_payment">Payment details</string>
+    <string name="activity_show_notes">Comments</string>
+    <string name="activity_show_title_label">Activity</string>
+    <string name="activity_show_organizer_label">Organizer</string>
+    <string name="activity_show_date_label">Date</string>
+    <string name="activity_show_time_label">Time</string>
+    <string name="activity_show_mode_label">Location</string>
+    <string name="activity_show_payment_method">Payment method</string>
+    <string name="activity_show_amount">Amount</string>
+    <string name="activity_show_total">Total</string>
+    <string name="activity_show_not_required">Not available</string>
+    <string name="activity_show_dash">—</string>
+    <string name="activity_show_no_notes">No additional notes for this activity.</string>
+    <string name="activity_show_hero_title">Activity overview</string>
+    <string name="activity_show_hero_subtitle">Details and schedule at a glance</string>
+    <string name="activity_show_icon_description">Activity calendar</string>
+</resources>
+```
+
+#### `app/src/main/res/values/activity_show_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="ActivityShowCard">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">12dp</item>
+        <item name="android:background">@drawable/admin_outline_background</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:padding">16dp</item>
+    </style>
+    <style name="ActivityShowHeading">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+        <item name="android:textColor">@color/primary_dark</item>
+        <item name="android:textSize">@dimen/type_body_large</item>
+    </style>
+    <style name="ActivityShowRow">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:gravity">center_vertical</item>
+        <item name="android:orientation">horizontal</item>
+    </style>
+    <style name="ActivityShowLabel">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:textColor">@color/text_subheading</item>
+        <item name="android:textSize">@dimen/type_subheading</item>
+    </style>
+    <style name="ActivityShowValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_heading</item>
+        <item name="android:textSize">@dimen/type_subheading</item>
+    </style>
+    <style name="ActivityShowValueBadge" parent="green_badge">
+        <item name="android:layout_marginStart">8dp</item>
+        <item name="android:maxWidth">220dp</item>
+        <item name="android:ellipsize">end</item>
+        <item name="android:singleLine">true</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/admin_dashboard_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string
+        name="admin_hello">Hello</string>
+    <string
+        name="admin_name">Kevin Merico!</string>
+    <string
+        name="admin_initials">KM</string>
+    <string
+        name="admin_subtitle">Keep managing your sales with care.</string>
+    <string
+        name="admin_search_hint">Search transactions...</string>
+    <string name="admin_items_metric_title">Items</string>
+    <string name="admin_persons_metric_title">Persons</string>
+    <string name="admin_items_metric_action">View item list  ›</string>
+    <string name="admin_persons_metric_action">View person list  ›</string>
+    <string
+        name="admin_zero_items">0 items</string>
+    <string name="admin_sample_items">Items</string>
+    <string name="admin_sample_items_subheading">Sample items available to browse</string>
+    <string name="admin_sample_activities">Activities</string>
+    <string name="admin_sample_activities_subheading">Recent invitations and activities</string>
+    <string name="admin_activities_search_hint">Search activities...</string>
+    <string name="admin_activities_online">Online</string>
+    <string name="admin_activities_in_person">In person</string>
+    <string name="admin_items_count">%1$d items</string>
+    <string
+        name="empty_list_title">Oops, the list is empty</string>
+    <string
+        name="empty_list_message">Items will appear here when available.</string>
+    <string
+        name="admin_pending">Pending</string>
+    <string
+        name="admin_all">All</string>
+    <string
+        name="admin_active">Active</string>
+    <string
+        name="admin_inactive">Inactive</string>
+    <string
+        name="admin_rejected">Rejected</string>
+    <string
+        name="admin_cancelled">Cancelled</string>
+</resources>
+```
+
+#### `app/src/main/res/values/admin_dashboard_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="AdminHeading">
+        <item
+            name="android:layout_width">match_parent</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:textColor">@color/text_heading</item>
+        <item
+            name="android:textSize">@dimen/type_dashboard_greeting</item>
+        <item
+            name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+    </style>
+    <style
+        name="AdminMetricCard">
+        <item
+            name="android:layout_width">0dp</item>
+        <item
+            name="android:layout_height">142dp</item>
+        <item
+            name="android:layout_weight">1</item>
+        <item
+            name="android:orientation">vertical</item>
+        <item
+            name="android:padding">14dp</item>
+        <item
+            name="android:background">@drawable/admin_metric_background</item>
+    </style>
+    <style
+        name="AdminMetricFloatingCard"
+        parent="AdminMetricCard">
+        <item
+            name="android:elevation">10dp</item>
+    </style>
+    <style
+        name="AdminMetricLabel">
+        <item
+            name="android:layout_width">match_parent</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:textColor">@color/primary_darkest</item>
+        <item
+            name="android:textSize">@dimen/type_subheading</item>
+        <item
+            name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+    </style>
+    <style
+        name="AdminMetricValue">
+        <item
+            name="android:layout_width">match_parent</item>
+        <item
+            name="android:layout_height">0dp</item>
+        <item
+            name="android:layout_weight">1</item>
+        <item
+            name="android:layout_marginTop">18dp</item>
+        <item
+            name="android:textColor">@color/primary_darkest</item>
+        <item
+            name="android:textSize">@dimen/type_metric</item>
+        <item
+            name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+    </style>
+    <style
+        name="AdminMetricChange">
+        <item
+            name="android:layout_width">match_parent</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:textSize">@dimen/type_detail</item>
+    </style>
+    <style
+        name="AdminStatusChip"
+        parent="Widget.Material3.Chip.Filter">
+        <item
+            name="android:layout_width">wrap_content</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:textSize">@dimen/type_label</item>
+        <item
+            name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+        <item
+            name="android:textColor">@color/admin_status_chip_text</item>
+        <item
+            name="chipBackgroundColor">@color/admin_status_chip_background</item>
+        <item
+            name="chipCornerRadius">100dp</item>
+        <item
+            name="chipStrokeWidth">0dp</item>
+        <item
+            name="chipMinHeight">36dp</item>
+        <item
+            name="chipIconVisible">false</item>
+        <item
+            name="checkedIconVisible">false</item>
+        <item
+            name="ensureMinTouchTargetSize">false</item>
+    </style>
+    <style
+        name="AdminStatusChipTheme">
+        <item
+            name="chipStyle">@style/AdminStatusChip</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/badge_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="StatusBadge"
+        parent="">
+        <item
+            name="android:layout_width">wrap_content</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:minHeight">28dp</item>
+        <item
+            name="android:gravity">center_vertical</item>
+        <item
+            name="android:includeFontPadding">false</item>
+        <item
+            name="android:textSize">@dimen/type_label</item>
+        <item
+            name="android:textStyle">bold</item>
+    </style>
+    <style
+        name="green_badge"
+        parent="StatusBadge">
+        <item
+            name="android:background">@drawable/green_badge</item>
+        <item
+            name="android:textColor">@color/badge_green</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/colors.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary_darkest">#062F1D</color>
+    <color name="primary_dark">#08783F</color>
+    <color name="primary">#25CE99</color>
+    <color name="primary_lime">#BEF264</color>
+    <color name="primary_light">#E6F7EE</color>
+
+    <color name="success">#16B981</color>
+    <color name="destructive">#EF4260</color>
+
+    <color name="badge_green">#12805C</color>
+    <color name="badge_red">#BC3048</color>
+    <color name="badge_yellow">#F9A93D</color>
+
+    <color name="text_heading">#101512</color>
+    <color name="text_body">#526572</color>
+    <color name="text_subheading">#84918A</color>
+
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+    <color name="white_20">#33FFFFFF</color>
+    <color name="white_25">#40FFFFFF</color>
+    <color name="white_38">#60FFFFFF</color>
+    <color name="black_27">#44000000</color>
+    <color name="success_9">#1816B981</color>
+
+    <color name="field_background">#F8F8F8</color>
+    <color name="field_border">#E9E9E9</color>
+    <color name="field_text">#171A18</color>
+    <color name="field_hint">#999D9A</color>
+    <color name="field_icon">#858B87</color>
+    <color name="field_error">#C83F55</color>
+    <color name="field_upload_border">#C8CECB</color>
+    <color name="search_background">#F5F6F8</color>
+    <color name="search_border">#E8ECE9</color>
+    <color name="search_text">#142119</color>
+    <color name="search_hint">#A7ABA8</color>
+    <color name="create_page_background">#F5F6F5</color>
+    <color name="activity_show_background">#F7FAF8</color>
+    <color name="page_divider">#ECEEEC</color>
+</resources>
+```
+
+#### `app/src/main/res/values/create_form_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="create_page_title">Create Entry</string>
+    <string name="create_page_heading">Create New Entry</string>
+    <string name="create_page_subtitle">Fill in the details below.</string>
+    <string name="create_image_hint">Tap to choose an image</string>
+    <string name="create_image_note">JPG or PNG image</string>
+    <string name="create_name_label">Name *</string>
+    <string name="create_name_hint">Enter a name</string>
+    <string name="create_number_label">Number</string>
+    <string name="create_number_hint">Enter a number</string>
+    <string name="create_description_label">Description</string>
+    <string name="create_description_hint">Write a short description</string>
+    <string name="create_tags_label">Tags (select multiple)</string>
+    <string name="create_tag_design">Design</string>
+    <string name="create_tag_marketing">Marketing</string>
+    <string name="create_tag_documentation">Documentation</string>
+    <string name="create_date_label">Date</string>
+    <string name="create_date_hint">Pick a date</string>
+    <string name="create_time_label">Time</string>
+    <string name="create_time_hint">Pick a time</string>
+    <string name="create_option_label">Category</string>
+    <string name="create_radio_label">Status</string>
+    <string name="create_radio_active">Active</string>
+    <string name="create_radio_inactive">Inactive</string>
+    <string name="create_checkbox">Make this visible</string>
+    <string name="create_save">Save Entry</string>
+    <string name="create_name_required">Name is required</string>
+    <string name="create_confirm_title">Continue with this entry?</string>
+    <string name="create_confirm_message">Review the details before continuing.</string>
+    <string name="create_done_title">Form complete</string>
+    <string name="create_done_message">The sample form is ready to connect to your data.</string>
+    <string-array name="create_categories">
+        <item>General</item>
+        <item>Food</item>
+        <item>Service</item>
+    </string-array>
+</resources>
+```
+
+#### `app/src/main/res/values/create_form_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="CreateLabel">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">14dp</item>
+        <item name="android:textColor">@color/field_text</item>
+        <item name="android:textSize">@dimen/type_subheading</item>
+    </style>
+    <style name="CreateField">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">44dp</item>
+        <item name="android:layout_marginTop">6dp</item>
+        <item name="android:background">@drawable/form_field_background</item>
+        <item name="android:paddingHorizontal">14dp</item>
+        <item name="android:textColor">@color/field_text</item>
+        <item name="android:textColorHint">@color/field_hint</item>
+        <item name="android:textSize">@dimen/type_subheading</item>
+    </style>
+    <style name="CreateFieldError">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">@color/field_error</item>
+        <item name="android:textSize">@dimen/type_detail</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/dashboard_sample_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
     <string
         name="dashboard_brand">Sample App</string>
     <string
@@ -3595,7 +6855,7 @@ public class DashboardSampleActivity extends AppCompatActivity {
 </resources>
 ```
 
-### `app/src/main/res/values/dashboard_sample_styles.xml`
+#### `app/src/main/res/values/dashboard_sample_styles.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -3616,9 +6876,9 @@ public class DashboardSampleActivity extends AppCompatActivity {
         <item
             name="strokeWidth">1dp</item>
         <item
-            name="strokeColor">#DDF5EA</item>
+            name="strokeColor">@color/primary_light</item>
         <item
-            name="cardBackgroundColor">#F7FDFB</item>
+            name="cardBackgroundColor">@color/primary_light</item>
     </style>
     <style
         name="DashboardStatNumber"
@@ -3630,11 +6890,11 @@ public class DashboardSampleActivity extends AppCompatActivity {
         <item
             name="android:layout_marginTop">12dp</item>
         <item
-            name="android:textSize">28sp</item>
+            name="android:textSize">@dimen/type_display</item>
         <item
             name="android:textStyle">bold</item>
         <item
-            name="android:textColor">#101A23</item>
+            name="android:textColor">@color/text_heading</item>
     </style>
     <style
         name="DashboardStatLabel"
@@ -3644,374 +6904,548 @@ public class DashboardSampleActivity extends AppCompatActivity {
         <item
             name="android:layout_height">wrap_content</item>
         <item
-            name="android:textSize">14sp</item>
+            name="android:textSize">@dimen/type_body</item>
         <item
-            name="android:textColor">#8191A1</item>
+            name="android:textColor">@color/text_subheading</item>
     </style>
 </resources>
 ```
 
-### `app/src/main/res/drawable/dashboard_stat_background.xml`
+#### `app/src/main/res/values/item_show_strings.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="180dp"
-    android:height="152dp"
-    android:viewportWidth="180"
-    android:viewportHeight="152">
-    <path
-        android:fillColor="#F7FDFB"
-        android:pathData="M0,0H180V152H0Z" />
-    <path
-        android:fillColor="#E9FAF2"
-        android:pathData="M65,152C90,115 112,142 136,100C151,76 168,72 180,72V152Z" />
-    <path
-        android:fillColor="#DFF6EB"
-        android:pathData="M94,152C118,111 140,143 180,110V152Z" />
-</vector>
+<resources>
+    <string name="item_show_sample_description">A fresh favorite made with quality ingredients.</string>
+    <string name="item_show_detail_label">Details</string>
+    <string name="item_show_category_label">Category</string>
+    <string name="item_show_tag_label">Tag</string>
+    <string name="item_show_status_label">Status</string>
+    <string name="item_show_share">Share Item</string>
+    <string name="item_show_close">Go Back</string>
+    <string name="item_show_about">About this item</string>
+    <string name="item_show_about_vehicle">About this vehicle</string>
+    <string name="item_show_from">Starting from</string>
+    <string name="item_show_favorite">Save item</string>
+</resources>
 ```
 
-### `app/src/main/res/drawable/dashboard_logo_background.xml`
+#### `app/src/main/res/values/item_strings.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<shape
+<resources>
+    <string
+        name="item_available">Available</string>
+    <string
+        name="item_unavailable">Unavailable</string>
+    <string
+        name="item_view_details">View Details</string>
+    <string
+        name="sample_item_name">Cheeseburger</string>
+    <string
+        name="sample_item_category">Fast Food</string>
+    <string
+        name="sample_item_detail">320 calories</string>
+    <string
+        name="sample_item_tag">Beef</string>
+    <string
+        name="sample_item_rating">4.8 (120)</string>
+    <string
+        name="sample_item_location">Manila, PH</string>
+    <string
+        name="sample_item_price">₱120</string>
+    <string
+        name="item_rating">%1$.1f (%2$d)</string>
+    <string
+        name="item_add_favorite">Add to favorites?</string>
+    <string
+        name="item_remove_favorite">Remove from favorites?</string>
+    <string
+        name="item_favorite_message">Update favorites for %1$s?</string>
+    <string
+        name="item_favorite_updated">Favorites updated</string>
+    <string
+        name="item_favorite_preview">This change is for the sample preview only.</string>
+</resources>
+```
+
+#### `app/src/main/res/values/item_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="ItemPhotoShape"
+        parent="">
+        <item
+            name="cornerSize">12dp</item>
+    </style>
+
+    <style
+        name="ItemChip"
+        parent="">
+        <item
+            name="android:layout_width">wrap_content</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:paddingHorizontal">6dp</item>
+        <item
+            name="android:paddingVertical">5dp</item>
+        <item
+            name="android:gravity">center_vertical</item>
+        <item
+            name="android:textSize">@dimen/type_caption</item>
+        <item
+            name="android:includeFontPadding">false</item>
+    </style>
+    <style
+        name="ItemChip.Info"
+        parent="ItemChip">
+        <item
+            name="android:background">@drawable/item_info_background</item>
+        <item
+            name="android:textColor">@color/text_heading</item>
+    </style>
+    <style
+        name="ItemChip.Tag"
+        parent="ItemChip">
+        <item
+            name="android:background">@drawable/user_detail_background</item>
+        <item
+            name="android:backgroundTint">@color/primary_light</item>
+        <item
+            name="android:textColor">@color/primary_dark</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/menu_list_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string
+        name="menu_title">Menu Items</string>
+    <string
+        name="menu_add">Add Item</string>
+    <string
+        name="menu_search">Search menu items…</string>
+    <string
+        name="menu_all">All  3</string>
+    <string
+        name="menu_food">Food  3</string>
+    <string
+        name="menu_drinks">Drinks  0</string>
+    <string
+        name="menu_desserts">Desserts  0</string>
+    <string
+        name="menu_breakfast">Breakfast  1</string>
+    <string
+        name="menu_lunch">Lunch  1</string>
+    <string
+        name="menu_dinner">Dinner  1</string>
+    <string
+        name="menu_preview">Sample screen</string>
+</resources>
+```
+
+#### `app/src/main/res/values/modal_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="ThemeOverlay.RestaurantApp.Modal"
+        parent="ThemeOverlay.Material3.MaterialAlertDialog">
+        <item
+            name="colorPrimary">@color/success</item>
+        <item
+            name="android:backgroundDimAmount">0.55</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/notification_actions.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_remove_title">Remove notification?</string>
+    <string name="notification_remove_message">This notification will be removed from the list.</string>
+    <string name="notification_removed_title">Notification removed</string>
+    <string name="notification_removed_message">The notification was removed.</string>
+</resources>
+```
+
+#### `app/src/main/res/values/person_list_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="person_list_title">Persons</string>
+    <string name="person_add">Add Person</string>
+    <string name="person_search">Search people…</string>
+    <string name="person_all">All</string>
+    <string name="person_active">Active</string>
+    <string name="person_inactive">Inactive</string>
+    <string name="person_add_preview">The Add Person page can be created separately.</string>
+    <string name="person_age_label">Age</string>
+    <string name="person_gender_label">Sex</string>
+    <string name="person_location_label">Location</string>
+    <string name="person_credits_label">Credits</string>
+    <string name="person_gender_sample">Female</string>
+</resources>
+```
+
+#### `app/src/main/res/values/report_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="report_title">Report</string>
+    <string name="report_total_count">Total Count</string>
+    <string name="report_sample_total">565</string>
+    <string name="report_breakdown">Breakdown</string>
+    <string name="report_overview">Activity overview</string>
+    <string name="report_overview_subtitle">A clear view of your latest results.</string>
+    <string name="report_sample_label">Sample data</string>
+    <string name="report_total_caption">Across all recorded statuses</string>
+    <string name="report_breakdown_subtitle">See how each status contributes to the total.</string>
+    <string name="report_note_title">About this report</string>
+    <string name="report_note">Each bar shows its status count as a share of the total activity.</string>
+    <string name="report_download_pdf">Download PDF</string>
+</resources>
+```
+
+#### `app/src/main/res/values/strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string
+        name="app_name">RestaurantApp</string>
+    <string
+        name="confirm_arrow">Confirm  →</string>
+    <string
+        name="sample_user_name">Alex Morgan</string>
+    <string
+        name="sample_user_role">Member</string>
+    <string
+        name="user_active">Active</string>
+    <string
+        name="user_inactive">Inactive</string>
+    <string
+        name="user_edit">Edit</string>
+    <string
+        name="user_delete">Delete</string>
+    <string name="person_quick_actions">Quick Actions</string>
+    <string
+        name="user_delete_title">Delete user?</string>
+    <string
+        name="user_delete_message">Remove %1$s from this sample list?</string>
+    <string
+        name="user_edit_preview">Edit %1$s</string>
+    <string
+        name="user_edit_note">Connect this button to your edit screen.</string>
+    <string
+        name="sample_user_initials">AM</string>
+    <string
+        name="sample_user_credits">250 credits</string>
+    <string
+        name="sample_user_age">29 years old</string>
+    <string
+        name="sample_user_location">Manila, PH</string>
+    <string
+        name="sample_user_email">jamie.reyes@example.com</string>
+    <string
+        name="sample_user_joined">Joined Jan 12, 2024</string>
+    <string
+        name="sample_user_specialty">Certified Level 2</string>
+    <string
+        name="user_credits">%1$d credits</string>
+    <string
+        name="user_age">%1$d years old</string>
+    <string
+        name="user_joined">Joined %1$s</string>
+</resources>
+```
+
+#### `app/src/main/res/values/themes.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources
+    xmlns:tools="http://schemas.android.com/tools">
+    <style
+        name="Base.Theme.RestaurantApp"
+        parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:fontFamily">@font/arial_rounded_mt_bold</item>
+        <item name="fontFamily">@font/arial_rounded_mt_bold</item>
+        <item name="colorPrimary">@color/primary_dark</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/primary</item>
+        <item name="colorOnSecondary">@color/text_heading</item>
+        <item name="colorSurface">@color/white</item>
+        <item name="colorOnSurface">@color/text_heading</item>
+        <item name="colorError">@color/destructive</item>
+        <item name="colorOnError">@color/white</item>
+        <item name="android:colorAccent">@color/primary</item>
+    </style>
+    <style
+        name="Theme.RestaurantApp"
+        parent="Base.Theme.RestaurantApp" />
+</resources>
+```
+
+#### `app/src/main/res/values/typography.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="type_micro">9sp</dimen>
+    <dimen name="type_caption">10sp</dimen>
+    <dimen name="type_detail">11sp</dimen>
+    <dimen name="type_label">12sp</dimen>
+    <dimen name="type_subheading">13sp</dimen>
+    <dimen name="type_body">14sp</dimen>
+    <dimen name="type_button">15sp</dimen>
+    <dimen name="type_body_large">16sp</dimen>
+    <dimen name="type_person_name">17sp</dimen>
+    <dimen name="type_card_heading">18sp</dimen>
+    <dimen name="type_card_heading_large">19sp</dimen>
+    <dimen name="type_section_heading">20sp</dimen>
+    <dimen name="type_report_section">21sp</dimen>
+    <dimen name="type_page_heading">22sp</dimen>
+    <dimen name="type_large_heading">24sp</dimen>
+    <dimen name="type_report_title">25sp</dimen>
+    <dimen name="type_metric">26sp</dimen>
+    <dimen name="type_dashboard_greeting">27sp</dimen>
+    <dimen name="type_display">28sp</dimen>
+    <dimen name="type_modal_symbol">36sp</dimen>
+    <dimen name="type_report_total">46sp</dimen>
+    <dimen name="type_auth_hero">34sp</dimen>
+</resources>
+```
+
+#### `app/src/main/res/values/user_styles.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style
+        name="UserDetail"
+        parent="">
+        <item
+            name="android:layout_width">wrap_content</item>
+        <item
+            name="android:layout_height">wrap_content</item>
+        <item
+            name="android:background">@drawable/user_detail_background</item>
+        <item
+            name="android:paddingHorizontal">10dp</item>
+        <item
+            name="android:paddingVertical">7dp</item>
+        <item
+            name="android:gravity">center_vertical</item>
+        <item
+            name="android:textColor">@color/text_body</item>
+        <item
+            name="android:textSize">@dimen/type_detail</item>
+        <item
+            name="android:includeFontPadding">false</item>
+    </style>
+    <style
+        name="UserAvatarShape"
+        parent="">
+        <item
+            name="cornerSize">50%</item>
+    </style>
+    <style name="PersonFactColumn" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:paddingHorizontal">4dp</item>
+    </style>
+    <style name="PersonFactLabel" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:textColor">@color/text_subheading</item>
+        <item name="android:textSize">@dimen/type_caption</item>
+    </style>
+    <style name="PersonFactValue" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textColor">@color/text_heading</item>
+        <item name="android:textSize">@dimen/type_detail</item>
+    </style>
+</resources>
+```
+
+#### `app/src/main/res/values/profile_strings.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="profile_public_heading">Public profile</string>
+    <string name="profile_public_hint">Update the details shown on your profile.</string>
+    <string name="profile_name_label">Full name *</string>
+    <string name="profile_email_label">Email address *</string>
+    <string name="profile_name_error">Enter your name</string>
+    <string name="profile_email_error">Enter a valid email address</string>
+    <string name="profile_preferences_heading">Preferences</string>
+    <string name="profile_notifications_label">Notifications</string>
+    <string name="profile_notifications_hint">Show account and activity updates.</string>
+    <string name="profile_logout_label">Log out</string>
+    <string name="profile_logout_hint">Return to the sign-in screen.</string>
+    <string name="profile_cancel">Cancel</string>
+    <string name="profile_save">Save changes</string>
+    <string name="profile_saved_title">Profile saved</string>
+    <string name="profile_saved_message">Your changes are ready.</string>
+    <string name="profile_save_error_title">Save failed</string>
+    <string name="profile_save_error_message">Please try again.</string>
+    <string name="profile_save_title">Save profile changes?</string>
+    <string name="profile_save_message">Your profile details will be updated on this device.</string>
+    <string name="profile_role_label">Role</string>
+    <string name="profile_access_label">Access</string>
+    <string name="profile_status_label">Status</string>
+    <string name="personal_profile_email">alex.rivera@example.com</string>
+    <string name="admin_profile_email">kevin.merico@example.com</string>
+</resources>
+```
+
+### res/values-night (1 files)
+
+#### `app/src/main/res/values-night/themes.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources
+    xmlns:tools="http://schemas.android.com/tools">
+    <style
+        name="Base.Theme.RestaurantApp"
+        parent="Theme.Material3.DayNight.NoActionBar" />
+</resources>
+```
+
+### res/mipmap-anydpi-v26 (2 files)
+
+#### `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<adaptive-icon
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:radius="14dp" />
-    <gradient
-        android:angle="315"
-        android:startColor="#098B50"
-        android:endColor="#05643B" />
-</shape>
+    <background
+        android:drawable="@drawable/ic_launcher_background" />
+    <foreground
+        android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome
+        android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
 ```
 
-### `app/src/main/res/drawable/ic_dashboard_bell.xml`
+#### `app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<vector
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="24dp"
-    android:height="24dp"
-    android:viewportWidth="24"
-    android:viewportHeight="24">
-    <path
-        android:fillColor="@android:color/transparent"
-        android:strokeColor="#08783F"
-        android:strokeWidth="2.2"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round"
-        android:pathData="M5,17H19L17,14V9a5,5 0,0 0,-10,0V14Z M10,20a2,2 0,0 0,4,0 M12,2V4" />
-</vector>
-```
-
-### Activity registration and sample navigation
-
-Inside the existing manifest application element, register the internal sample screen:
-
-```xml
-<activity
-    android:name=".DashboardSampleActivity"
-    android:exported="false" />
-```
-
-To open the requested sample from an existing preview button, use the normal Activity Intent. Add only this button/listener to the existing screen; do not replace its unrelated content or create a new navigation framework:
-
-```java
-findViewById(R.id.open_dashboard_sample).setOnClickListener(v ->
-        startActivity(new Intent(this, DashboardSampleActivity.class)));
-```
-
-The launching Activity imports `android.content.Intent`. The preview button XML uses the included dashboard_open string:
-
-```xml
-<com.google.android.material.button.MaterialButton
-    android:id="@+id/open_dashboard_sample"
-    android:layout_width="wrap_content"
-    android:layout_height="wrap_content"
-    android:layout_marginHorizontal="24dp"
-    android:text="@string/dashboard_open"
-    android:textAllCaps="false"
-    app:backgroundTint="#08783F" />
-```
-
-Declare `xmlns:app="http://schemas.android.com/apk/res-auto"` on the containing layout if missing. Build with `./gradlew --offline :app:assembleDebug`. Verify the cards fit, the count is at the far right and the empty RecyclerView occupies the space below the header. For a real app, summary cards may navigate to existing role-specific list Activities when those destinations are part of the requested workflow. Do not invent destinations solely for the sample dashboard.
-
-## 21. Mandatory seeding and newest-first list behavior
-
-When implementing a real Android app or machine problem, build the schema the requested workflows need in `DBHelper`. Seed every table in that schema with coherent local sample records. Seed data explicitly listed in the machine problem, and add sensible examples for the other required entities even when the problem gives none. For example, a food-ordering app needs several categories, foods, users/customers if used, orders, and order items; a pet adoption app needs species/breeds, pets, applicants, and applications if those entities are part of the requested flow. Give each list enough varied records to demonstrate scrolling, search, category/status filters, and the appropriate person/item/activity card. Use different statuses and realistic relationships. Keep all content offline, small, relevant, and free of real private information.
-
-Add small `seed...` methods inside `DBHelper` or one simple `helpers/Seeder.java` if that is clearer for the problem. Create tables first and seed source rows before dependent rows so the plain ID values in records correspond to real sample data. Do not add SQLite foreign-key constraints. Run initial seeders from `onCreate(SQLiteDatabase db)` only after table creation. On a migration, seed newly added tables or missing defaults without deleting or duplicating existing records. Never reseed on every Activity launch or every list refresh. Do not wipe user edits with seed data. An idempotent seeder can check whether its table is empty before inserting:
-
-```java
-private void seedCategories(SQLiteDatabase db) {
-    try (Cursor cursor = db.rawQuery("SELECT COUNT(*) FROM categories", null)) {
-        cursor.moveToFirst();
-        if (cursor.getInt(0) > 0) return;
-    }
-    for (String name : new String[]{"Food", "Drinks", "Desserts"}) {
-        ContentValues values = new ContentValues();
-        values.put("name", name);
-        db.insertOrThrow("categories", null, values);
-    }
-}
-```
-
-This example assumes the real schema includes a `categories` table with a `name` column; replace those names with the actual model/table. Never paste the example into an unrelated project unchanged. Seed each actual table with the same simple pattern, including related child records, using the existing SQLite database handle passed to `onCreate`. If a table has a unique key, `insertWithOnConflict(..., SQLiteDatabase.CONFLICT_IGNORE)` may also make a migration seeder safe to rerun. Prefer a few useful records per table over large random datasets. Show seeded records in the correct approved RecyclerView row for their type.
-
-Lists MUST show the latest created records first. `DBHelper.get()` in section 8 uses `id DESC` as the default for integer AUTOINCREMENT IDs. If the model has a reliable `createdAt` column, query with `createdAt DESC, id DESC` instead. Use a real creation time or increasing ID; do not sort by display name, status, or a mutable update time for the default latest view. Search and chip filtering retain that order. After a successful create, reload the list (or insert the new model at index 0) and update the adapter so the new row is visible at the top. Changing a filter or returning to the screen must not restore an old order. A user-selected alternative sort may temporarily change the view, but All/default returns to newest-first. When using in-memory preview records, add each new record at index 0 or sort by the same creation key.
-
-Before finishing a list screen, check the actual rendered RecyclerView against the exact section 19 layout for its record type. Check first-row placement after creating a record, search/filter order, badge counts, chip icon meanings, and the modal/toast appearance after a transaction. A build alone does not confirm these visual and ordering requirements.
-
-## 22. Simple ID relationships: never use SQLite foreign keys
-
-This rule applies to every table and model in future projects. Never write `FOREIGN KEY (...)`, `REFERENCES other_table(id)`, `ON DELETE CASCADE`, or similar constraints. A relationship is only a normal integer value stored on the record: `userId`, `studentId`, `subjectId`, `itemId`, `orderId`, etc. In SQL use a plain column such as `studentId INTEGER`; in Java use `public int studentId;`. The column name must match the public field so DBHelper can map it directly. Do not create a `User user` or `Subject subject` field in a stored model or have DBHelper recursively load an object graph. This keeps DBHelper short and predictable.
-
-If a detail screen needs another record's name, call `db.show(User.class, model.userId)` or the equivalent explicitly in that screen's loading method. If an ID is invalid or the related record was deleted, handle the missing result in the UI. Validate an ID when a transaction requires the related record to exist. Seed records in an order that makes their stored IDs meaningful, but do not add database foreign-key enforcement. Do not include foreign-key constraints even if the machine problem describes related entities; represent those relationships with the plain `...Id` fields above.
-
-## 23. Dashboard notification drawer and conditional bell
-
-The dashboard bell opens a bottom `BottomSheetDialog` using the locally available Material Components dependency. Use `bottom_sheet_notifications.xml` for the sheet, with a drag handle, Notifications title, close button and RecyclerView. The five visible entries come from a sample `ArrayList<NotificationItem>` bound through `NotificationAdapter(Context context, ArrayList<NotificationItem> list)`. The sheet XML contains no repeated hardcoded rows. Replace sample items with actual notifications when the application has them. Keep newest notifications first. The row is compact, mint/white, and uses a relevant local vector icon, title, message and relative time. Allow scrolling when more entries exist or the device is short.
-
-The bell's visual state is conditional. Use the SAME list that feeds the RecyclerView: nonempty means pale mint `#E6F7EE` background, emerald `#08783F` bell and red dot; empty means pale gray `#F5F6F8` background, gray `#526375` bell and no dot. Refresh this state when notifications are added, read, or removed. A red dot with zero notifications is incorrect. The sample has five items, so its bell is colored. Do not create network push or system notifications unless requested.
-
-Dashboard overview cards handle needed navigation. For example, a Users/Students summary card opens the matching role-specific Users/Students list; an Items/Menu summary card opens the matching role-specific Menu list. Make the whole card clickable and give it the normal ripple. Wire the Intent only when the destination Activity exists and the role is allowed to open it. Keep dashboard layouts/Activities separate per role, and do not add duplicate navigation buttons beneath the cards.
-
-For an existing admin menu list, give the Items summary card the ID `dashboard_items_card` and attach its click in that role's dashboard Activity:
-
-```java
-findViewById(R.id.dashboard_items_card).setOnClickListener(v ->
-        startActivity(new Intent(this, AdminMenuListActivity.class)));
-```
-
-Use the equivalent role-specific destination for other cards. Do not attach a listener to a card without a real destination. In XML, set `app:rippleColor="#2608783F"` on clickable MaterialCardView cards while preserving the approved card size and colors.
-
-The current dashboard code, layout and strings in section 20 already include the notification connection and bell state. Add these supporting files when recreating the sample:
-
-### `app/src/main/java/com/example/app/models/NotificationItem.java`
-
-```java
-package com.example.app.models;
-
-public class NotificationItem {
-    public String title, message, time;
-    public int icon;
-}
-```
-
-### `app/src/main/java/com/example/app/adapters/NotificationAdapter.java`
-
-```java
-package com.example.app.adapters;
-
-import android.content.Context;
-import android.view.LayoutInflater;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ImageView;
-import android.widget.TextView;
-import androidx.annotation.NonNull;
-import androidx.recyclerview.widget.RecyclerView;
-import com.example.app.R;
-import com.example.app.models.NotificationItem;
-import java.util.ArrayList;
-
-public class NotificationAdapter extends RecyclerView.Adapter<NotificationAdapter.NotificationViewHolder> {
-    public Context context;
-    public ArrayList<NotificationItem> list;
-
-    public NotificationAdapter(Context context, ArrayList<NotificationItem> list) {
-        this.context = context;
-        this.list = list;
-    }
-
-    @NonNull
-    @Override
-    public NotificationViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
-        return new NotificationViewHolder(LayoutInflater.from(context)
-                .inflate(R.layout.sample_notification_list, parent, false));
-    }
-
-    @Override
-    public void onBindViewHolder(@NonNull NotificationViewHolder holder, int position) {
-        NotificationItem item = list.get(position);
-        holder.title.setText(item.title);
-        holder.message.setText(item.message);
-        holder.time.setText(item.time);
-        holder.icon.setImageResource(item.icon);
-    }
-
-    @Override
-    public int getItemCount() {
-        return list.size();
-    }
-
-    public static class NotificationViewHolder extends RecyclerView.ViewHolder {
-        ImageView icon;
-        TextView title, message, time;
-
-        public NotificationViewHolder(@NonNull View view) {
-            super(view);
-            icon = view.findViewById(R.id.notification_icon);
-            title = view.findViewById(R.id.notification_title);
-            message = view.findViewById(R.id.notification_message);
-            time = view.findViewById(R.id.notification_time);
-        }
-    }
-}
-```
-
-### `app/src/main/res/layout/bottom_sheet_notifications.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingHorizontal="20dp"
-    android:paddingBottom="28dp"
-    android:background="@drawable/dashboard_sheet_background">
-    <View
-        android:layout_width="36dp"
-        android:layout_height="4dp"
-        android:layout_gravity="center_horizontal"
-        android:layout_marginTop="10dp"
-        android:background="@drawable/menu_search_background"
-        android:backgroundTint="#DDE5E1" />
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="22dp"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/dashboard_notifications_title"
-            android:textSize="22sp"
-            android:textStyle="bold"
-            android:textColor="#101A23" />
-        <TextView
-            android:id="@+id/notifications_close"
-            android:layout_width="36dp"
-            android:layout_height="36dp"
-            android:background="@drawable/user_detail_background"
-            android:gravity="center"
-            android:text="×"
-            android:textSize="24sp"
-            android:textColor="#526375" />
-    </LinearLayout>
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/notifications_list"
-        android:layout_width="match_parent"
-        android:layout_height="440dp"
-        android:layout_marginTop="16dp"
-        android:clipToPadding="false"
-        android:paddingBottom="8dp" />
-</LinearLayout>
-```
-
-### `app/src/main/res/layout/sample_notification_list.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:layout_marginBottom="5dp"
-    android:paddingHorizontal="12dp"
-    android:paddingVertical="6dp"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:background="@drawable/modal_card">
-    <ImageView
-        android:id="@+id/notification_icon"
-        android:layout_width="42dp"
-        android:layout_height="42dp"
-        android:padding="10dp"
-        android:background="@drawable/user_avatar_background"
-        android:src="@drawable/ic_dashboard_bell"
-        android:tint="#08783F" />
-    <LinearLayout
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:layout_marginStart="12dp"
-        android:orientation="vertical">
-        <TextView
-            android:id="@+id/notification_title"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/dashboard_notification_title"
-            android:textSize="14sp"
-            android:textStyle="bold"
-            android:textColor="#101A23" />
-        <TextView
-            android:id="@+id/notification_message"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="@string/dashboard_notification_message"
-            android:textSize="12sp"
-            android:textColor="#8191A1" />
-        <TextView
-            android:id="@+id/notification_time"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:text="@string/dashboard_notification_time"
-            android:textSize="10sp"
-            android:textColor="#08783F" />
-    </LinearLayout>
-</LinearLayout>
-```
-
-### `app/src/main/res/drawable/dashboard_sheet_background.xml`
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<shape
+<adaptive-icon
     xmlns:android="http://schemas.android.com/apk/res/android">
-    <corners
-        android:topLeftRadius="24dp"
-        android:topRightRadius="24dp" />
-    <solid
-        android:color="#FFFFFF" />
-</shape>
+    <background
+        android:drawable="@drawable/ic_launcher_background" />
+    <foreground
+        android:drawable="@drawable/ic_launcher_foreground" />
+    <monochrome
+        android:drawable="@drawable/ic_launcher_foreground" />
+</adaptive-icon>
 ```
 
-### `app/src/main/res/color/dashboard_bell_background.xml`
+
+### res/xml (2 files)
+
+#### `app/src/main/res/xml/backup_rules.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<selector
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:state_selected="true"
-        android:color="#E6F7EE" />
-    <item
-        android:color="#F5F6F8" />
-</selector>
+<full-backup-content />
 ```
 
-### `app/src/main/res/color/dashboard_bell_tint.xml`
+#### `app/src/main/res/xml/data_extraction_rules.xml`
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
-<selector
-    xmlns:android="http://schemas.android.com/apk/res/android">
-    <item
-        android:state_selected="true"
-        android:color="#08783F" />
-    <item
-        android:color="#526375" />
-</selector>
+<data-extraction-rules>
+    <cloud-backup />
+</data-extraction-rules>
 ```
 
+### AndroidManifest.xml (1 file)
+
+#### `app/src/main/AndroidManifest.xml`
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+    <application
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.RestaurantApp">
+        <activity
+            android:name=".SampleLoginActivity"
+            android:exported="true">
+            <intent-filter>
+                <action
+                    android:name="android.intent.action.MAIN" />
+                <category
+                    android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".SampleRegisterActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SampleActivityShowActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SampleReportPageActivity"
+            android:exported="false" />
+        <activity
+            android:name=".SampleCreatePageActivity"
+            android:exported="false" />
+        <activity
+            android:name=".DashboardSampleActivity"
+            android:exported="false" />
+        <activity
+            android:name=".PersonalDashboardActivity"
+            android:exported="false" />
+        <activity
+            android:name=".PersonalProfileActivity"
+            android:exported="false" />
+        <activity
+            android:name=".admin.AdminMenuListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".admin.AdminItemShowActivity"
+            android:exported="false" />
+        <activity
+            android:name=".admin.AdminPersonListActivity"
+            android:exported="false" />
+        <activity
+            android:name=".admin.AdminDashboardActivity"
+            android:exported="false" />
+        <activity
+            android:name=".admin.AdminProfileActivity"
+            android:exported="false" />
+    </application>
+</manifest>
+```
